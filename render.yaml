@@ -6,11 +6,7 @@ services:
     plan: free
     healthCheckPath: /
     envVars:
-      - key: SIGNALOS_DB
-        value: /data/signalos.db
-      - key: SIGNALOS_PLATFORM_KEY   # (опц.) платформенный Anthropic-ключ для платных токенов
+      - key: DATABASE_URL
         sync: false
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
+      - key: SIGNALOS_PLATFORM_KEY
+        sync: false
