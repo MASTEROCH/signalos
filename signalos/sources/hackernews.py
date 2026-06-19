@@ -1,6 +1,6 @@
 """HackerNews через Algolia Search API — без ключа, мгновенно. Гоним и истории, и комменты."""
 import urllib.parse, time
-from . import get_json, detect_lang
+from . import get_json, detect_lang, strip_html
 
 
 def search(keywords, cfg):
@@ -16,7 +16,7 @@ def search(keywords, cfg):
                 continue
             seen.add(oid)
             text = h.get("comment_text") or h.get("story_text") or h.get("title") or ""
-            text = _strip(text)
+            text = strip_html(text)
             if len(text) < 20:
                 continue
             out.append({
@@ -26,9 +26,3 @@ def search(keywords, cfg):
                 "ts": h.get("created_at_i", int(time.time())), "lang": detect_lang(text),
             })
     return out
-
-
-def _strip(s):
-    import re
-    s = re.sub(r"<[^>]+>", " ", s)
-    return re.sub(r"\s+", " ", s).strip()
