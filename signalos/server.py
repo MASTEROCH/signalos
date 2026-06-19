@@ -61,7 +61,8 @@ def do_setup(uid, data):
 
 
 def projects_of(uid):
-    return [{"id": p["id"], "name": p["name"], "color": p.get("color", "#46f3c4"), "link": p["link"]}
+    return [{"id": p["id"], "name": p["name"], "color": p.get("color", "#46f3c4"), "link": p.get("link", ""),
+             "kw": len(p.get("keywords", []))}
             for p in engine.get_config(uid).get("projects", [])]
 
 
@@ -145,6 +146,13 @@ class H(BaseHTTPRequestHandler):
             for r in rows:
                 r["ago"] = _ago(r["ts"]); r["chat"] = r["source_label"]
             return self._send(200, rows)
+        if p == "/api/automation":
+            return self._send(200, engine.get_config(uid).get("automation",
+                              {"auto_scan": True, "interval_min": PLANS[u["plan"]]["interval"] // 60, "min_strength": 3}))
+        parts = p.strip("/").split("/")
+        if len(parts) == 3 and parts[1] == "project":     # GET полные данные проекта
+            pr = engine.get_project(uid, parts[2])
+            return self._send(200, pr) if pr else self._send(404, {"error": "нет такого проекта"})
         return self._send(404, {"error": "not found"})
 
     # ---------- POST ----------
@@ -200,9 +208,18 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True, "plan": plan, "demo": True})
             return self._send(400, {"error": "неизвестный план"})
 
+        if p == "/api/automation":
+            return self._send(200, engine.set_automation(uid, self._body()))
         parts = p.strip("/").split("/")
         if len(parts) == 4 and parts[1] == "source" and parts[3] == "toggle":
             return self._send(200, settings.toggle_source(uid, parts[2], self._body().get("enabled")))
+        if len(parts) == 4 and parts[1] == "source" and parts[3] == "config":
+            return self._send(200, engine.set_source_config(uid, parts[2], self._body()))
+        if len(parts) == 4 and parts[1] == "project" and parts[3] == "delete":
+            return self._send(200, engine.delete_project(uid, parts[2]))
+        if len(parts) == 3 and parts[1] == "project":     # POST обновить проект
+            pr = engine.update_project(uid, parts[2], self._body())
+            return self._send(200, pr) if pr else self._send(404, {"error": "нет такого проекта"})
         if len(parts) == 4 and parts[1] == "signal":
             sid = int(parts[2])
             if parts[3] in ("approve", "skip"):
@@ -218,12 +235,25 @@ def _ago(ts):
     return f"{d//86400} дн"
 
 
+_last_scan = {}
+
+
 def auto_scan_loop():
+    """Тикает раз в минуту; сканирует юзера, если включён автопилот и прошёл его интервал."""
     while True:
-        time.sleep(INTERVAL)
+        time.sleep(60)
+        now = time.time()
         for uid in db.all_user_ids():
-            if uid not in _scanning and is_configured(uid):
-                scan(uid)
+            if uid in _scanning or not is_configured(uid):
+                continue
+            cfg = engine.get_config(uid); auto = cfg.get("automation", {})
+            if auto.get("auto_scan", True) is False:
+                continue
+            u = db.get_user(uid)
+            iv = (auto.get("interval_min") or (PLANS.get(u["plan"], PLANS["free"])["interval"] // 60)) * 60
+            if now - _last_scan.get(uid, 0) >= iv:
+                _last_scan[uid] = now
+                threading.Thread(target=lambda x=uid: scan(x), daemon=True).start()
 
 
 def main():

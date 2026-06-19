@@ -145,6 +145,11 @@ def stats(uid):
             "hot": row["hot"] or 0, "today": row["today"] or 0}
 
 
+def delete_project_signals(uid, pid):
+    with _c() as c:
+        c.execute("DELETE FROM signals WHERE user_id=? AND project=?", (uid, pid))
+
+
 def all_user_ids():
     with _c() as c:
         return [r["user_id"] for r in c.execute("SELECT user_id FROM configs").fetchall()]

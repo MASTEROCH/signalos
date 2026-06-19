@@ -28,6 +28,65 @@ def save_config(uid, cfg):
     db.save_config(uid, cfg)
 
 
+def get_project(uid, pid):
+    return next((p for p in get_config(uid).get("projects", []) if p["id"] == pid), None)
+
+
+def update_project(uid, pid, f):
+    cfg = get_config(uid)
+    for p in cfg.get("projects", []):
+        if p["id"] == pid:
+            for k in ("name", "link", "one_liner", "audience", "tone"):
+                if k in f and f[k] is not None:
+                    p[k] = str(f[k]).strip()
+            if "keywords" in f:
+                p["keywords"] = [x.strip() for x in f["keywords"] if x and x.strip()]
+            if "negative_keywords" in f:
+                p["negative_keywords"] = [x.strip() for x in f["negative_keywords"] if x and x.strip()]
+            if "min_strength" in f:
+                try: p["min_strength"] = max(1, min(5, int(f["min_strength"])))
+                except Exception: pass
+            save_config(uid, cfg)
+            return p
+    return None
+
+
+def delete_project(uid, pid):
+    cfg = get_config(uid)
+    cfg["projects"] = [p for p in cfg.get("projects", []) if p["id"] != pid]
+    if not cfg["projects"]:
+        cfg["configured"] = False
+    save_config(uid, cfg)
+    db.delete_project_signals(uid, pid)
+    return {"ok": True}
+
+
+def set_automation(uid, auto):
+    cfg = get_config(uid)
+    a = cfg.setdefault("automation", {})
+    if "auto_scan" in auto: a["auto_scan"] = bool(auto["auto_scan"])
+    if "min_strength" in auto:
+        try: a["min_strength"] = max(1, min(5, int(auto["min_strength"])))
+        except Exception: pass
+    if "interval_min" in auto:
+        try: a["interval_min"] = max(5, min(1440, int(auto["interval_min"])))
+        except Exception: pass
+    save_config(uid, cfg)
+    return cfg.get("automation", {})
+
+
+def set_source_config(uid, sid, conf):
+    cfg = get_config(uid)
+    for s in cfg.get("sources", []):
+        if s["id"] == sid:
+            for k, v in (conf or {}).items():
+                if k in ("subreddits", "feeds", "chats"):
+                    continue
+                s[k] = v
+    save_config(uid, cfg)
+    return {"ok": True}
+
+
 def all_keywords(projects):
     seen, out = set(), []
     for p in projects:
