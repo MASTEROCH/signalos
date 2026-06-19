@@ -682,8 +682,13 @@
 </div>
 
 <script>
-/* ============ РЕЖИМ: LIVE (через сервер) или ДЕМО (открыт как файл) ============ */
-const LIVE = location.protocol.startsWith('http');
+/* ============ РЕЖИМ: LIVE (через сервер) или ДЕМО (нет бэкенда) ============ */
+let LIVE = location.protocol.startsWith('http');   // станет false, если бэкенд недоступен (напр. GitHub Pages)
+function demoNote(){
+  return location.protocol==='file:'
+    ? 'Это демо. Для реальной работы запусти <b>./run.sh</b> локально.'
+    : 'Это онлайн-витрина (демо). Полная версия с регистрацией и реальным поиском — после деплоя на сервер (см. DEPLOY.md).';
+}
 
 /* ============ SVG-ИКОНКИ (единый line-стиль, currentColor) ============ */
 const IC = {
@@ -801,8 +806,11 @@ async function loadMain(){
   renderAll();
 }
 function demoMode(){
+  LIVE = false;                         // бэкенда нет → кнопки показывают демо-уведомление, а не «ошибку загрузки»
   PROJECTS = DEMO_PROJECTS; SOURCES = DEMO_SOURCES;
   QUEUE = DEMO_SIGNALS.map(s=>({...s})); totalToday = QUEUE.length;
+  ME = ME || {email:'demo@signalos', plan:'free', credits:300};
+  updateTokens(); renderUser();
   setMode(false);
 }
 async function reloadQueue(){
@@ -1002,7 +1010,7 @@ function autosize(el){ el.style.height='auto'; el.style.height=Math.max(84,el.sc
 
 /* ============ СКАН ============ */
 async function scanNow(){
-  if(!LIVE){ toast('Демо-режим. Запусти <b>./run.sh</b> — и радар начнёт ловить реальных людей'); return; }
+  if(!LIVE){ toast(demoNote()); return; }
   if(scanning) return;
   scanning = true; manualScan = true;
   const btn = document.getElementById('scanbtn'); btn.classList.add('busy'); btn.innerHTML = IC.refresh + ' Сканирую…';
@@ -1078,7 +1086,7 @@ const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g
 
 function openWizard(){ WIZ.step=0; document.getElementById('wiz').classList.add('show'); renderWiz(); }
 function addProduct(){
-  if(!LIVE){ toast('Запусти <b>./run.sh</b>, чтобы добавлять продукты'); return; }
+  if(!LIVE){ toast(demoNote()); return; }
   WIZ.description=''; WIZ.link=''; WIZ.name=''; WIZ.phrases=[]; WIZ.newchip='';
   openWizard();
 }
@@ -1170,7 +1178,7 @@ async function wizSuggest(){
 }
 
 async function wizFinish(){
-  if(!LIVE){ toast('Это демо. Запусти <b>./run.sh</b>, чтобы включить радар по-настоящему'); return; }
+  if(!LIVE){ toast(demoNote()); return; }
   WIZ.step = 99; renderWiz();
   document.getElementById('wizscreen').innerHTML = wizFinishing('Включаю радар и ищу первых клиентов…');
   try{
@@ -1199,7 +1207,7 @@ const SET = {status:null, sources:[], billing:null, auto:null, openHelp:null, tg
   tg:{api_id:'',api_hash:'',phone:'',code:'',password:'',chats:''}};
 
 async function openSettings(){
-  if(!LIVE){ toast('Запусти <b>./run.sh</b>, чтобы открыть настройки'); return; }
+  if(!LIVE){ toast(demoNote()); return; }
   document.getElementById('settings').classList.add('show');
   document.getElementById('setbody').innerHTML = '<div class="wizspin" style="margin:50px auto"></div>';
   try{
@@ -1474,7 +1482,7 @@ function updateTokens(){
 async function refreshMe(){ try{ const m=await api('/api/auth/me'); ME=m.user; updateTokens(); renderUser(); }catch(e){} }
 
 async function openBuy(){
-  if(!LIVE){ toast('Запусти <b>./run.sh</b>'); return; }
+  if(!LIVE){ toast(demoNote()); return; }
   document.getElementById('buy').classList.add('show');
   document.getElementById('buybody').innerHTML='<div class="wizspin" style="margin:60px auto"></div>';
   try{ renderBuy(await api('/api/billing')); }catch(e){ document.getElementById('buybody').innerHTML='<div class="seth">Токены</div><p style="color:var(--mut)">Не удалось загрузить.</p>'; }
@@ -1532,7 +1540,7 @@ async function regenerate(id, el){
 
 /* ============ МЕНЕДЖЕР ПРОЕКТОВ (CRUD) ============ */
 const PM = {proj:null, newKw:'', newNeg:''};
-function openProjects(){ if(!LIVE){ toast('Запусти <b>./run.sh</b>'); return; } document.getElementById('projmgr').classList.add('show'); pmList(); }
+function openProjects(){ if(!LIVE){ toast(demoNote()); return; } document.getElementById('projmgr').classList.add('show'); pmList(); }
 function closeProjects(){ document.getElementById('projmgr').classList.remove('show'); }
 
 async function pmList(){
@@ -1557,7 +1565,7 @@ async function pmList(){
 }
 function pmNew(){ closeProjects(); addProduct(); }
 function exportCSV(){
-  if(!LIVE){ toast('Запусти <b>./run.sh</b>'); return; }
+  if(!LIVE){ toast(demoNote()); return; }
   const a=document.createElement('a'); a.href='/api/export'; a.download='signalos_leads.csv';
   document.body.appendChild(a); a.click(); a.remove(); toast('Выгружаю лиды в CSV…');
 }
