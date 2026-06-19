@@ -579,15 +579,16 @@
 <div class="toast" id="toast"></div>
 
 <!-- ====== МАСТЕР НАСТРОЙКИ ====== -->
-<div class="wiz" id="wiz">
+<div class="wiz" id="wiz" onclick="if(event.target===this)closeWizard()">
   <div class="wizbox">
+    <div class="setclose" onclick="closeWizard()" title="Закрыть">✕</div>
     <div class="wizdots" id="wizdots"></div>
     <div class="wizscreen" id="wizscreen"></div>
   </div>
 </div>
 
 <!-- ====== ПАНЕЛЬ НАСТРОЕК ====== -->
-<div class="wiz" id="settings">
+<div class="wiz" id="settings" onclick="if(event.target===this)closeSettings()">
   <div class="wizbox set">
     <div class="setclose" onclick="closeSettings()">✕</div>
     <div id="setbody"></div>
@@ -598,7 +599,7 @@
 <div class="gate" id="gate"></div>
 
 <!-- ====== МЕНЕДЖЕР ПРОЕКТОВ ====== -->
-<div class="wiz" id="projmgr">
+<div class="wiz" id="projmgr" onclick="if(event.target===this)closeProjects()">
   <div class="wizbox set">
     <div class="setclose" onclick="closeProjects()">✕</div>
     <div id="pmbody"></div>
@@ -824,6 +825,12 @@ function onboardingHTML(){
     return `<div class="empty"><div class="radar"></div><h3>Это демо</h3>
       <div>Чтобы радар искал <b>реальных</b> клиентов — запусти <code>./run.sh</code> в папке signalos.</div></div>`;
   }
+  if(LIVE && PROJECTS.length===0){
+    return `<div class="empty"><div class="radar"></div>
+      <h3>Создай первый продукт</h3>
+      <div style="max-width:430px;margin:0 auto 18px">Опиши, что ты продаёшь — и радар начнёт искать людей, которым это нужно. Минута, ничего технического.</div>
+      <button class="btn go" onclick="addProduct()">${ico('search')} Создать продукт</button></div>`;
+  }
   if(scanning){
     return `<div class="empty">${radarScanHTML()}<h3>Сканирую эфир…</h3>
       <div>Радар прочёсывает интернет в поисках твоих клиентов. Первые засветки появятся здесь через минуту — вкладка обновится сама.</div></div>`;
@@ -922,6 +929,7 @@ document.addEventListener('keydown', e=>{
   const gateOpen= document.getElementById('gate').classList.contains('show');
   if(e.key==='Escape' && setOpen){ closeSettings(); return; }
   if(e.key==='Escape' && pmOpen){ closeProjects(); return; }
+  if(e.key==='Escape' && wizOpen){ closeWizard(); return; }
   if(wizOpen || setOpen || pmOpen || gateOpen) return;
   if(e.target.tagName==='TEXTAREA' || e.target.tagName==='INPUT'){ if(e.key==='Escape') e.target.blur(); return; }
   const list = visible(); if(!list.length){ if(e.key==='r') scanNow(); return; }
@@ -949,7 +957,10 @@ function addProduct(){
   WIZ.description=''; WIZ.link=''; WIZ.name=''; WIZ.phrases=[]; WIZ.newchip='';
   openWizard();
 }
-function closeWizard(){ document.getElementById('wiz').classList.remove('show'); }
+function closeWizard(){
+  document.getElementById('wiz').classList.remove('show');
+  if(LIVE && ME){ renderUser(); loadMain().catch(()=>{}); }   // показать приложение (если продуктов нет — пустое состояние)
+}
 
 function renderWiz(){
   document.getElementById('wizdots').innerHTML =
