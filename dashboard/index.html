@@ -1384,7 +1384,7 @@ async function saveClaude(){
   try{
     const r=await api('/api/settings/claude',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
     SET.cmsg=r.msg; SET.cmsgC=r.valid?'ok':'err';
-    if(r.valid){ claudeOn=true; setMode(true); SET.status.claude=true; }
+    if(r.valid){ claudeOn=true; setMode(true); SET.status.claude=true; renderAiBanner(); renderCards(); }
   }catch(e){ SET.cmsg='Ошибка сохранения'; SET.cmsgC='err'; }
   renderSettings();
 }
