@@ -45,11 +45,13 @@ def all_keywords(projects):
 
 
 def prefilter(text, projects):
+    """Пропускаем пост к классификатору, если есть совпадение по значимым словам-токенам ключей."""
     low = text.lower()
     if len(low) < 20:
         return False
     for p in projects:
-        if any(k.lower() in low for k in p.get("keywords", [])):
+        toks = classifier.keyword_tokens(p.get("keywords", []))
+        if any(classifier._wordin(t, low) for t in toks):
             if not any(n.lower() in low for n in p.get("negative_keywords", [])):
                 return True
     return False

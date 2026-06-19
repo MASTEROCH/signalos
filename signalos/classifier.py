@@ -28,6 +28,28 @@ INTENT = {  # фразы-маркеры намерения → язык-неза
 }
 
 
+# слова, которые НЕ берём как ключ-токены (грамматика + общие intent-слова — они и так в INTENT)
+KW_STOP = set("""для и в во на с со по о об у к от за из что как мне нам нас это эта эти же бы ли так
+вот про над под при без они оно мой моя мои наш ваш ваша или есть быть ищу нужен нужна нужно нужны
+хочу подскажите посоветуйте кто знает помогите where how what need looking for recommend any the and
+a an to of in on is are my our your want anyone someone please""".split())
+
+
+def keyword_tokens(keywords):
+    """Бьём ключ-фразы на значимые слова-токены: 'ищу telegram mini app' → {telegram, mini, app}."""
+    toks = set()
+    for k in keywords:
+        for w in re.findall(r"[a-zа-яё0-9]+", k.lower()):
+            if len(w) >= 3 and w not in KW_STOP:
+                toks.add(w)
+    return toks
+
+
+def _wordin(token, low):
+    """Совпадение по границе слова (а не подстроке: 'app' не матчит 'happen')."""
+    return re.search(r"(?<![a-zа-яё0-9])" + re.escape(token) + r"(?![a-zа-яё0-9])", low) is not None
+
+
 # ---------- ПУБЛИЧНЫЙ API ----------
 def process(post, projects):
     """Возвращает запись сигнала или None (шум)."""
@@ -36,21 +58,23 @@ def process(post, projects):
 
 # ---------- БЕСПЛАТНЫЙ РЕЖИМ ----------
 def _free(post, projects):
-    text = post["text"].lower()
-    best, best_score = None, 0
+    low = post["text"].lower()
+    best, best_score, best_hits = None, 0, []
+    intent_hits = sum(1 for ph in INTENT.get(post["lang"], []) if ph in low)
+    q = 1 if "?" in post["text"] else 0
     for p in projects:
-        kws = [k.lower() for k in p.get("keywords", [])]
         neg = [n.lower() for n in p.get("negative_keywords", [])]
-        if any(n in text for n in neg):
+        if any(n in low for n in neg):
             continue
-        hits = [k for k in kws if k in text]
-        if not hits:
+        toks = keyword_tokens(p.get("keywords", []))
+        hit_toks = [t for t in toks if _wordin(t, low)]
+        full_hits = [k.lower() for k in p.get("keywords", []) if k.lower() in low]   # бонус за фразу целиком
+        # одиночный общий токен — слишком шумно для безключевого режима: нужна фраза целиком или ≥2 токена
+        if not (full_hits or len(hit_toks) >= 2):
             continue
-        score = len(hits) * 2
-        score += sum(1 for ph in INTENT.get(post["lang"], []) if ph in text) * 2
-        score += 1 if "?" in post["text"] else 0
+        score = len(hit_toks) + len(full_hits) * 2 + intent_hits * 2 + q
         if score > best_score:
-            best, best_score, best_hits = p, score, hits
+            best, best_score, best_hits = p, score, (full_hits or hit_toks)
     if not best or best_score < 3:
         return None
     strength = max(1, min(5, best_score))

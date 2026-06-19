@@ -63,6 +63,6 @@ def stats():
         row = c.execute("""SELECT
             SUM(status='queue') q, SUM(status='approved') a, SUM(status='skipped') s,
             SUM(status='queue' AND temp='hot') hot,
-            SUM(ts > ?) today FROM signals""", (time.time() - 86400,)).fetchone()
+            SUM(created > ?) today FROM signals""", (time.time() - 86400,)).fetchone()
     return {"queue": row["q"] or 0, "approved": row["a"] or 0, "skipped": row["s"] or 0,
             "hot": row["hot"] or 0, "today": row["today"] or 0}
