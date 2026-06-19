@@ -161,6 +161,13 @@
   .hint{display:flex; gap:14px; flex-wrap:wrap; align-items:center; color:var(--mut); font-size:13.5px; margin-bottom:20px; font-weight:450}
   .kbd{font-family:var(--mono); font-size:11px; color:var(--mut); background:rgba(255,255,255,.05);
     border:1px solid var(--line2); border-bottom-width:2px; border-radius:6px; padding:2px 6px; margin-right:5px}
+  .aibanner{display:flex; align-items:center; gap:11px; padding:12px 16px; border-radius:13px; margin-bottom:16px;
+    background:rgba(70,243,196,.07); border:1px solid var(--sig2); font-size:13.5px; color:var(--ink); line-height:1.45}
+  .aibanner:empty{display:none}
+  .aibanner b{color:var(--sig)}
+  .aibanner .go-ai{margin-left:auto; cursor:pointer; color:#04130d; font-weight:700; white-space:nowrap;
+    background:linear-gradient(180deg,var(--sig),var(--sig2)); padding:7px 14px; border-radius:20px}
+  .aibanner .x{cursor:pointer; color:var(--mut2); font-size:16px; line-height:1}
   .qbar{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px}
   .qchip{display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; padding:8px 14px; border-radius:30px;
     border:1px solid var(--line2); background:var(--panel2); color:var(--mut); cursor:pointer; transition:.16s var(--ease)}
@@ -644,6 +651,7 @@
         <span id="hint-flow">Скопируй ответ → открой оригинал → вставь и отправь</span>
         <span style="margin-left:auto; color:var(--mut2)">Горячие клавиши: <span class="kbd">A</span>скопировать <span class="kbd">S</span>пропустить <span class="kbd">J</span><span class="kbd">K</span>листать</span>
       </div>
+      <div class="aibanner" id="aibanner"></div>
       <div class="qbar" id="qbar"></div>
       <div id="cards"></div>
     </div>
@@ -859,8 +867,17 @@ function highlight(text, words){
   return t;
 }
 
+function renderAiBanner(){
+  const el=document.getElementById('aibanner'); if(!el) return;
+  const show = LIVE && ME && !claudeOn && (function(){ try{return localStorage.getItem('sos_aibanner')!=='1';}catch(e){return true;} })();
+  el.innerHTML = show
+    ? `${ico('spark')} <span><b>Базовый режим</b> — поиск по словам и шаблонные ответы. Включи умный ИИ: точнее находки и живые ответы.</span>
+       <span class="go-ai" onclick="openSettings()">Включить ИИ</span>
+       <span class="x" title="Скрыть" onclick="try{localStorage.setItem('sos_aibanner','1')}catch(e){};renderAiBanner()">✕</span>`
+    : '';
+}
 function renderCards(){
-  renderQbar();
+  renderQbar(); renderAiBanner();
   const box = document.getElementById('cards');
   if(scanning && manualScan){   // ручной поиск — показываем большой радар на весь фид
     document.getElementById('qbar').innerHTML='';

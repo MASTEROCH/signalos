@@ -70,8 +70,11 @@ def _free(post, projects):
         toks = keyword_tokens(p.get("keywords", []))
         hit_toks = [t for t in toks if _wordin(t, low)]
         full_hits = [k.lower() for k in p.get("keywords", []) if k.lower() in low]   # бонус за фразу целиком
-        # одиночный общий токен — слишком шумно для безключевого режима: нужна фраза целиком или ≥2 токена
+        # одиночный общий токен — слишком шумно: нужна фраза целиком или ≥2 токена
         if not (full_hits or len(hit_toks) >= 2):
+            continue
+        # анти-фейк: нужен реальный СИГНАЛ НАМЕРЕНИЯ (вопрос / просьба / боль), а не просто упоминание слова
+        if not (intent_hits or q):
             continue
         score = len(hit_toks) + len(full_hits) * 2 + intent_hits * 2 + q
         if score > best_score:
