@@ -10,6 +10,10 @@ DEFAULT_SOURCES = [
      "subreddits": ["startups", "Entrepreneur", "smallbusiness"]},
     {"id": "bluesky", "enabled": True, "label": "Bluesky", "max_keywords": 6},
     {"id": "lemmy", "enabled": True, "label": "Lemmy", "max_keywords": 5, "instance": "lemmy.world"},
+    {"id": "github", "enabled": True, "label": "GitHub", "max_keywords": 5},
+    {"id": "stackexchange", "enabled": True, "label": "Stack Exchange", "max_keywords": 4, "site": "stackoverflow"},
+    {"id": "mastodon", "enabled": True, "label": "Mastodon", "instance": "mastodon.social"},
+    {"id": "lobsters", "enabled": False, "label": "Lobsters"},
     {"id": "rss", "enabled": True, "label": "Google Alerts / RSS", "feeds": []},
     {"id": "telegram", "enabled": False, "label": "Telegram", "chats": [], "per_chat": 40},
 ]
@@ -21,7 +25,12 @@ def default_config():
 
 
 def get_config(uid):
-    return db.get_config(uid) or default_config()
+    cfg = db.get_config(uid) or default_config()
+    have = {s["id"] for s in cfg.get("sources", [])}      # домержить новые каналы в старые конфиги
+    for s in DEFAULT_SOURCES:
+        if s["id"] not in have:
+            cfg.setdefault("sources", []).append(dict(s))
+    return cfg
 
 
 def save_config(uid, cfg):

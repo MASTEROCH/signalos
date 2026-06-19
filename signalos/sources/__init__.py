@@ -5,15 +5,36 @@
 Бесплатные и без ключей: hackernews, reddit, rss (вкл. Google Alerts).
 Опциональные (нужны ключи/либы): telegram.
 """
-import json, urllib.request, urllib.parse, re
+import json, gzip, urllib.request, urllib.parse, re
 
 UA = "SignalOS/0.2 (lead radar; +https://github.com/roch)"
 
 
 def http_get(url, timeout=12, headers=None):
-    req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "gzip", **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read().decode("utf-8", "replace")
+        data = r.read()
+        if r.headers.get("Content-Encoding") == "gzip":
+            data = gzip.decompress(data)
+        return data.decode("utf-8", "replace")
+
+
+def strip_html(s):
+    import html as _html
+    return _html.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s or ""))).strip()
+
+
+def iso_ts(s):
+    import calendar, time
+    if not s:
+        return int(time.time())
+    s = str(s).split("+")[0].rstrip("Z")
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return calendar.timegm(time.strptime(s, fmt))
+        except Exception:
+            pass
+    return int(time.time())
 
 
 def get_json(url, timeout=12, headers=None):
@@ -35,6 +56,14 @@ def collect(source_id, keywords, cfg):
             from . import bluesky; return bluesky.search(keywords, cfg)
         if source_id == "lemmy":
             from . import lemmy; return lemmy.search(keywords, cfg)
+        if source_id == "github":
+            from . import github; return github.search(keywords, cfg)
+        if source_id == "stackexchange":
+            from . import stackexchange; return stackexchange.search(keywords, cfg)
+        if source_id == "mastodon":
+            from . import mastodon; return mastodon.search(keywords, cfg)
+        if source_id == "lobsters":
+            from . import lobsters; return lobsters.search(keywords, cfg)
         if source_id == "rss":
             from . import rss; return rss.fetch(cfg)
         if source_id == "telegram":
