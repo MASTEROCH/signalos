@@ -15,3 +15,6 @@ __pycache__/
 # системное
 .DS_Store
 /tmp/
+
+# Telegram-сессии пользователей
+sessions/
