@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalOS — Radar лидов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070b10; --bg2:#0b1119; --panel:rgba(20,28,38,.72); --panel2:rgba(28,38,50,.6);
+    --line:rgba(120,160,190,.14); --line2:rgba(120,160,190,.28);
+    --ink:#eaf2f8; --mut:#93a6b8; --mut2:#677a8c;
+    --sig:#46f3c4; --sig2:#19b88e; --hot:#ffd24a; --cold:#5b8cff; --bad:#ff6b6b;
+    --glass-blur:18px; --r:18px;
+    --glass:blur(26px) saturate(180%);
+    --spec:inset 0 1px 0 rgba(255,255,255,.16), inset 0 0 0 1px rgba(255,255,255,.04), inset 0 -14px 30px -20px rgba(0,0,0,.5);
+    --shadow:0 18px 50px -18px rgba(0,0,0,.7);
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono',Menlo,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --display:'Manrope','Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    --ease:cubic-bezier(.22,1,.36,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  h1,h2,h3{font-family:var(--display); letter-spacing:-.02em}
+  body{
+    font-family:var(--sans); color:var(--ink); background:var(--bg);
+    background-image:
+      radial-gradient(900px 600px at 88% -8%, rgba(70,243,196,.10), transparent 60%),
+      radial-gradient(700px 500px at -5% 100%, rgba(91,140,255,.10), transparent 55%);
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  .app{display:grid; grid-template-columns:248px 1fr; height:100vh}
+
+  /* SIDEBAR */
+  .side{border-right:1px solid var(--line); padding:20px 16px; display:flex; flex-direction:column; gap:16px;
+    background:linear-gradient(180deg, rgba(11,17,25,.6), rgba(7,11,16,.2)); overflow-y:auto}
+  .brand{display:flex; align-items:center; gap:11px; padding:2px 4px}
+  .radar{position:relative; width:38px; height:38px; border-radius:50%; flex:0 0 auto; overflow:hidden;
+    border:1px solid var(--line2);
+    background:
+      radial-gradient(circle, var(--sig) 0 11%, transparent 12%),
+      radial-gradient(circle, rgba(70,243,196,.12), transparent 72%);
+    box-shadow:0 0 12px -3px rgba(70,243,196,.5)}
+  /* вращающийся сектор-луч — идёт скан, как в настоящем радаре */
+  .radar::before{content:""; position:absolute; inset:-2px; border-radius:50%;
+    background:conic-gradient(from 0deg, rgba(70,243,196,.65), rgba(70,243,196,.10) 48deg, transparent 72deg, transparent 360deg);
+    animation:sweep 2.2s linear infinite}
+  /* расходящаяся волна-пинг */
+  .radar::after{content:""; position:absolute; inset:0; border-radius:50%;
+    border:1.5px solid var(--sig); opacity:0; animation:ping 2.2s cubic-bezier(.2,.7,.3,1) infinite}
+  @keyframes sweep{to{transform:rotate(360deg)}}
+  @keyframes ping{0%{transform:scale(.15); opacity:.85} 60%{opacity:.12} 100%{transform:scale(1); opacity:0}}
+  .brand b{font-size:18px; letter-spacing:-.01em; font-family:var(--display); font-weight:800}
+  .brand b span{color:var(--sig)}
+  .brand small{display:block; color:var(--mut2); font-size:11px; letter-spacing:.4px; text-transform:uppercase; margin-top:2px; font-weight:500}
+
+  .seclabel{font-size:11px; text-transform:uppercase; letter-spacing:1.1px; color:var(--mut2); padding:0 6px; margin-bottom:-6px; font-weight:600}
+  .projects{display:flex; flex-direction:column; gap:4px}
+  .proj{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; cursor:pointer;
+    border:1px solid transparent; color:var(--mut); font-size:15px; transition:.18s var(--ease); user-select:none; font-weight:500}
+  .proj:hover{background:var(--panel2); color:var(--ink)}
+  .proj.on{background:var(--panel); border-color:var(--line2); color:var(--ink)}
+  .dot{width:8px; height:8px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 8px currentColor}
+  .proj .cnt{margin-left:auto; font-size:12.5px; font-family:var(--mono); color:var(--mut2);
+    background:rgba(255,255,255,.04); padding:2px 9px; border-radius:20px}
+  .proj.on .cnt{color:var(--sig)}
+
+  .side-foot{margin-top:auto; display:flex; flex-direction:column; gap:8px}
+  .pill{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--mut); padding:9px 12px;
+    border:1px solid var(--line); border-radius:11px; background:var(--panel2); font-weight:500}
+  .pill .live{width:7px; height:7px; border-radius:50%; background:var(--sig); box-shadow:0 0 8px var(--sig); animation:pulse 1.6s infinite}
+  .pill.demo .live{background:var(--hot); box-shadow:0 0 8px var(--hot)}
+  @keyframes pulse{50%{opacity:.3}}
+  .addproj{font-size:13.5px; color:var(--mut2); text-align:center; padding:9px; border:1px dashed var(--line2);
+    border-radius:11px; cursor:pointer; transition:.18s var(--ease); font-weight:500}
+  .addproj:hover{color:var(--sig); border-color:var(--sig2); transform:translateY(-1px)}
+
+  /* MAIN */
+  .main{display:flex; flex-direction:column; min-width:0; height:100vh}
+  .top{display:flex; align-items:center; gap:14px; padding:20px 28px; border-bottom:1px solid var(--line)}
+  .top h1{font-size:22px; font-weight:800; letter-spacing:-.02em}
+  .top h1 small{color:var(--mut); font-weight:450; font-size:14.5px; margin-left:9px; font-family:var(--sans); letter-spacing:0}
+  .stats{margin-left:auto; display:flex; gap:10px}
+  .stat{padding:9px 16px; border:1px solid var(--line); border-radius:14px; background:var(--panel2); text-align:right; min-width:86px;
+    transition:.2s var(--ease); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); box-shadow:var(--spec)}
+  .stat:hover{border-color:var(--line2); transform:translateY(-1px)}
+  .stat b{font-family:var(--display); font-size:25px; font-weight:800; display:block; line-height:1; letter-spacing:-.02em}
+  .stat span{font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--mut2); font-weight:500}
+  .stat.s b{color:var(--sig)} .stat.h b{color:var(--hot)}
+
+  .feed{flex:1; overflow-y:auto; padding:20px 26px 40px; scroll-behavior:smooth}
+  .feed::-webkit-scrollbar{width:10px} .feed::-webkit-scrollbar-thumb{background:var(--line2); border-radius:10px; border:3px solid transparent; background-clip:content-box}
+
+  .hint{display:flex; gap:14px; flex-wrap:wrap; align-items:center; color:var(--mut); font-size:13.5px; margin-bottom:20px; font-weight:450}
+  .kbd{font-family:var(--mono); font-size:11px; color:var(--mut); background:rgba(255,255,255,.05);
+    border:1px solid var(--line2); border-bottom-width:2px; border-radius:6px; padding:2px 6px; margin-right:5px}
+
+  /* CARD — Liquid Glass */
+  .card{border:1px solid var(--line); border-radius:var(--r); background:var(--panel);
+    backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass);
+    box-shadow:var(--shadow), var(--spec); margin-bottom:16px; overflow:hidden; transition:.24s var(--ease); position:relative;
+    animation:cardin .5s var(--ease) both}
+  @keyframes cardin{from{opacity:0; transform:translateY(16px)}}
+  .card::before{content:""; position:absolute; inset:0; pointer-events:none; border-radius:inherit;
+    background:linear-gradient(160deg, rgba(255,255,255,.07), transparent 38%); opacity:.8}
+  .card:hover{transform:translateY(-2px); border-color:var(--line2)}
+  .card.sel{border-color:var(--sig2); box-shadow:0 0 0 1px var(--sig2), 0 18px 50px -18px rgba(0,0,0,.8), var(--spec)}
+  .card.gone{opacity:0; transform:translateX(40px) scale(.97); max-height:0!important; margin:0; border:0}
+  .card .accent{position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--sig2); z-index:1}
+  .card[data-temp="hot"] .accent{background:var(--hot)} .card[data-temp="warm"] .accent{background:var(--sig)} .card[data-temp="cold"] .accent{background:var(--cold)}
+
+  .chead{display:flex; align-items:center; gap:11px; padding:16px 20px 13px}
+  .src{display:flex; align-items:center; gap:9px; font-size:14.5px; color:var(--mut)}
+  .src .ic{width:22px; height:22px; border-radius:6px; background:var(--panel2); border:1px solid var(--line2); display:grid; place-items:center; font-size:12px}
+  .src b{color:var(--ink); font-weight:600}
+  .meta{margin-left:auto; display:flex; align-items:center; gap:14px}
+  .strength{display:flex; align-items:center; gap:7px}
+  .bars{display:flex; gap:2px; align-items:flex-end; height:16px}
+  .bars i{width:3.5px; background:var(--mut2); border-radius:2px; opacity:.4}
+  .bars i:nth-child(1){height:5px} .bars i:nth-child(2){height:8px} .bars i:nth-child(3){height:11px} .bars i:nth-child(4){height:14px} .bars i:nth-child(5){height:17px}
+  .strength.l5 .bars i{background:var(--sig); opacity:1}
+  .strength.l4 .bars i:nth-child(-n+4){background:var(--sig); opacity:1}
+  .strength.l3 .bars i:nth-child(-n+3){background:var(--hot); opacity:1}
+  .strength.l2 .bars i:nth-child(-n+2){background:var(--cold); opacity:1}
+  .strength.l1 .bars i:nth-child(-n+1){background:var(--cold); opacity:1}
+  .strength small{font-family:var(--mono); font-size:12.5px; color:var(--mut); font-weight:500}
+  .tag{font-size:12.5px; padding:4px 12px; border-radius:20px; display:inline-flex; align-items:center; gap:6px; font-weight:500}
+  .tag .dot{width:7px;height:7px}
+  .ago{font-size:12.5px; color:var(--mut2); font-family:var(--mono)}
+
+  .quote{margin:0 20px; padding:15px 17px; border-radius:14px; background:rgba(8,12,17,.5);
+    border:1px solid var(--line); font-size:16px; line-height:1.58; color:#dbe6ef; font-weight:450}
+  .quote .h{font-size:11.5px; text-transform:uppercase; letter-spacing:.7px; color:var(--mut2); margin-bottom:7px; display:flex; align-items:center; gap:6px; font-weight:600}
+  .quote .hl{background:rgba(70,243,196,.16); color:var(--sig); border-radius:4px; padding:0 4px; font-weight:500}
+
+  .why{display:flex; align-items:flex-start; gap:9px; margin:13px 20px 0; font-size:14px; color:var(--mut); line-height:1.55}
+  .why svg{flex:0 0 auto; margin-top:2px; opacity:.8}
+
+  .draft{margin:15px 20px 0}
+  .draft .h{font-size:11.5px; text-transform:uppercase; letter-spacing:.7px; color:var(--mut2); margin-bottom:8px; display:flex; align-items:center; gap:7px; font-weight:600}
+  .draft .h .ai{color:var(--sig); font-weight:700}
+  .draft textarea{width:100%; min-height:92px; resize:vertical; font-family:var(--sans); font-size:16px; line-height:1.58; font-weight:450;
+    color:var(--ink); background:rgba(70,243,196,.05); border:1.5px solid var(--line2); border-radius:14px; padding:14px 16px; outline:none; transition:.2s var(--ease)}
+  .draft textarea:focus{border-color:var(--sig2); background:rgba(70,243,196,.08); box-shadow:0 0 0 4px rgba(70,243,196,.09)}
+
+  .actions{display:flex; align-items:center; gap:11px; padding:16px 20px 18px}
+  .btn{display:inline-flex; align-items:center; gap:8px; font-size:15px; font-weight:600; padding:11px 19px;
+    border-radius:13px; border:1.5px solid var(--line2); background:var(--panel2); color:var(--ink); cursor:pointer; transition:.2s var(--ease); text-decoration:none; position:relative; overflow:hidden; letter-spacing:-.01em}
+  .btn:hover{border-color:var(--mut2); transform:translateY(-2px)}
+  .btn:active{transform:translateY(0)}
+  .btn.go{background:linear-gradient(180deg,var(--sig),var(--sig2)); color:#04130d; border-color:transparent; font-weight:700;
+    box-shadow:0 8px 24px -10px rgba(70,243,196,.5), inset 0 1px 0 rgba(255,255,255,.4)}
+  .btn.go:hover{box-shadow:0 14px 34px -10px rgba(70,243,196,.62)}
+  .btn.go::after{content:""; position:absolute; top:0; left:-120%; width:55%; height:100%;
+    background:linear-gradient(100deg, transparent, rgba(255,255,255,.4), transparent); transition:.6s var(--ease)}
+  .btn.go:hover::after{left:140%}
+  .btn.skip{color:var(--mut)}
+  .btn .k{font-family:var(--mono); font-size:11px; opacity:.7; border:1px solid currentColor; border-radius:4px; padding:0 4px; margin-left:2px}
+  .actions .link{margin-left:auto; font-size:13.5px; color:var(--mut2); text-decoration:none; display:flex; align-items:center; gap:5px}
+  .actions .link:hover{color:var(--sig)}
+
+  .empty{text-align:center; padding:64px 20px; color:var(--mut)}
+  .empty .radar{width:68px;height:68px;margin:0 auto 22px}
+  .empty h3{color:var(--ink); font-weight:800; margin-bottom:9px; font-size:22px; letter-spacing:-.02em}
+  .empty div{font-size:15px; line-height:1.55}
+
+  .toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); opacity:0;
+    background:var(--panel); border:1px solid var(--line2); backdrop-filter:blur(12px); padding:11px 18px; border-radius:12px;
+    font-size:13px; box-shadow:var(--shadow); transition:.22s; pointer-events:none; z-index:50; max-width:420px}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .toast b{color:var(--sig)}
+
+  .scan{margin-left:6px; padding:11px 18px; font-size:14.5px}
+  .scan.busy{opacity:.7; pointer-events:none}
+  .scan.busy::after{content:""; width:11px;height:11px; border:2px solid #04130d; border-top-color:transparent;
+    border-radius:50%; display:inline-block; animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .sources{display:flex; flex-direction:column; gap:3px}
+  .srcrow{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--mut); padding:6px 9px; border-radius:9px}
+  .srcrow .d{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .srcrow.on .d{background:var(--sig); box-shadow:0 0 7px var(--sig)}
+  .srcrow.off .d{background:var(--mut2)}
+  .srcrow b{color:var(--ink); font-weight:500}
+  .srcrow small{margin-left:auto; font-family:var(--mono); font-size:9.5px; color:var(--mut2)}
+
+  .onb{border:1px solid var(--line2); border-radius:var(--r); background:var(--panel); padding:24px; margin-bottom:18px; backdrop-filter:blur(var(--glass-blur))}
+  .onb h3{font-size:16px; margin-bottom:6px} .onb h3 span{color:var(--sig)}
+  .onb p{font-size:12.5px; color:var(--mut); line-height:1.6; margin-bottom:16px; max-width:660px}
+  .steps{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px}
+  .step{border:1px solid var(--line); border-radius:12px; padding:14px; background:var(--panel2)}
+  .step .n{font-family:var(--mono); color:var(--sig); font-size:12px; margin-bottom:6px}
+  .step b{font-size:12.5px; display:block; margin-bottom:4px}
+  .step span{font-size:11.5px; color:var(--mut2); line-height:1.5}
+  .langtag{font-size:9.5px; font-family:var(--mono); text-transform:uppercase; color:var(--mut2);
+    border:1px solid var(--line2); border-radius:5px; padding:1px 5px}
+  .tip{font-size:11.5px; color:var(--mut2); line-height:1.6; border-top:1px solid var(--line); padding-top:13px}
+  .tip b{color:var(--sig)}
+
+  /* ====== МАСТЕР НАСТРОЙКИ (онбординг) ====== */
+  .wiz{position:fixed; inset:0; z-index:100; display:none; align-items:center; justify-content:center; padding:24px;
+    background:radial-gradient(1100px 760px at 70% -10%, rgba(70,243,196,.13), transparent 60%), rgba(4,7,11,.86); backdrop-filter:blur(10px)}
+  .wiz.show{display:flex; animation:fade .3s}
+  .wizbox{width:100%; max-width:620px; border:1px solid var(--line2); border-radius:30px; background:var(--panel);
+    box-shadow:0 40px 100px -24px rgba(0,0,0,.85), var(--spec);
+    padding:44px 48px 40px; backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass);
+    animation:wizin .55s var(--ease); position:relative; overflow:hidden}
+  .wizbox::before{content:""; position:absolute; inset:0; pointer-events:none; border-radius:inherit;
+    background:linear-gradient(155deg, rgba(255,255,255,.08), transparent 32%)}
+  .wizbox > *{position:relative}
+  @keyframes wizin{from{opacity:0; transform:translateY(22px) scale(.96)}}
+  .wizdots{display:flex; gap:7px; justify-content:center; align-items:center; margin-bottom:30px}
+  .wizdots i{width:7px; height:7px; border-radius:99px; background:var(--line2); transition:.45s var(--ease)}
+  .wizdots i.on{background:linear-gradient(90deg,var(--sig),var(--sig2)); width:26px; height:7px; border-radius:99px;
+    box-shadow:0 0 10px rgba(70,243,196,.6)}
+  .wizscreen{text-align:center; animation:fadeup .4s var(--ease)}
+  @keyframes fade{from{opacity:0}}
+  @keyframes fadeup{from{opacity:0; transform:translateY(12px)}}
+  .wizscreen .big{width:78px;height:78px;margin:0 auto 22px}
+  .wizscreen h2{font-size:34px; line-height:1.18; margin-bottom:16px; font-weight:800; letter-spacing:-.03em}
+  .wizscreen h2 span{color:var(--sig)}
+  .wizscreen p{font-size:17px; color:var(--mut); line-height:1.62; max-width:480px; margin:0 auto 28px; font-weight:450}
+  .wizscreen .left{text-align:left}
+  .wizlabel{font-size:16px; font-weight:600; color:var(--ink); margin-bottom:9px; display:block; text-align:left; letter-spacing:-.01em}
+  .wizlabel span{font-weight:400}
+  .wiz textarea, .wiz input{width:100%; font-family:var(--sans); font-size:17px; color:var(--ink); line-height:1.55; font-weight:450;
+    background:rgba(8,12,17,.55); border:1.5px solid var(--line2); border-radius:16px; padding:16px 18px; outline:none; transition:.2s var(--ease)}
+  .wiz textarea{min-height:122px; resize:vertical; margin-bottom:18px}
+  .wiz textarea::placeholder, .wiz input::placeholder{color:var(--mut2)}
+  .wiz textarea:focus, .wiz input:focus{border-color:var(--sig2); background:rgba(70,243,196,.07); box-shadow:0 0 0 4px rgba(70,243,196,.1)}
+  .wiz input{margin-bottom:18px}
+  .wizex{font-size:14.5px; color:var(--mut2); background:var(--panel2); border:1.5px dashed var(--line2); border-radius:13px;
+    padding:14px 16px; margin-bottom:22px; text-align:left; line-height:1.5; cursor:pointer; transition:.2s var(--ease)}
+  .wizex:hover{border-color:var(--sig2); color:var(--mut); transform:translateY(-1px); background:rgba(70,243,196,.04)}
+  .wizex b{color:var(--sig); font-weight:600}
+  .chips{display:flex; flex-wrap:wrap; gap:9px; margin-bottom:10px; text-align:left}
+  .chip{display:inline-flex; align-items:center; gap:8px; font-size:15px; color:var(--ink); background:rgba(70,243,196,.09);
+    border:1.5px solid var(--sig2); border-radius:22px; padding:8px 10px 8px 15px; animation:pop .28s var(--ease); font-weight:500}
+  @keyframes pop{from{opacity:0; transform:scale(.7)}}
+  .chip x{cursor:pointer; opacity:.55; font-style:normal; width:19px;height:19px; display:grid; place-items:center; border-radius:50%; transition:.15s; font-size:13px}
+  .chip x:hover{opacity:1; background:rgba(255,255,255,.12)}
+  .chipadd{display:flex; gap:9px; margin-bottom:22px}
+  .chipadd input{margin-bottom:0}
+  .wizbtns{display:flex; gap:12px; align-items:center; justify-content:center; margin-top:8px}
+  .wbtn{font-size:17px; font-weight:600; padding:16px 30px; border-radius:16px; border:1.5px solid var(--line2);
+    background:var(--panel2); color:var(--ink); cursor:pointer; transition:.22s var(--ease); position:relative; overflow:hidden; letter-spacing:-.01em}
+  .wbtn:hover{border-color:var(--mut2); transform:translateY(-2px)}
+  .wbtn:active{transform:translateY(0)}
+  .wbtn.go{background:linear-gradient(180deg,var(--sig),var(--sig2)); color:#04130d; border-color:transparent; flex:1; max-width:340px; font-weight:700;
+    box-shadow:0 10px 30px -10px rgba(70,243,196,.5), inset 0 1px 0 rgba(255,255,255,.45)}
+  .wbtn.go:hover{box-shadow:0 16px 40px -10px rgba(70,243,196,.65); transform:translateY(-2px)}
+  .wbtn.go::after{content:""; position:absolute; top:0; left:-120%; width:60%; height:100%;
+    background:linear-gradient(100deg, transparent, rgba(255,255,255,.45), transparent); transition:.6s var(--ease)}
+  .wbtn.go:hover::after{left:130%}
+  .wbtn.glow{animation:breathe 2.6s ease-in-out infinite}
+  @keyframes breathe{0%,100%{box-shadow:0 10px 30px -10px rgba(70,243,196,.5)} 50%{box-shadow:0 14px 44px -8px rgba(70,243,196,.85)}}
+  .wbtn.ghost{background:transparent; border-color:transparent; color:var(--mut2); font-weight:500}
+  .wbtn.ghost:hover{color:var(--ink); transform:none}
+  .wbtn:disabled{opacity:.4; pointer-events:none}
+  .wizspin{display:inline-block; width:46px;height:46px;border:3.5px solid var(--line2);border-top-color:var(--sig);
+    border-radius:50%; animation:spin 1s linear infinite; margin:14px auto 22px}
+  .smartbadge{display:inline-flex; align-items:center; gap:7px; font-size:13.5px; color:var(--sig); margin-bottom:16px; font-weight:500;
+    background:rgba(70,243,196,.09); border:1.5px solid var(--sig2); border-radius:22px; padding:6px 14px}
+  .wizscreen .sub{margin-top:16px; font-size:13.5px; color:var(--mut2)}
+
+  /* подсказка на первой карточке */
+  .coach{display:flex; align-items:center; gap:11px; margin:13px 18px 0; padding:12px 16px; border-radius:13px;
+    background:rgba(70,243,196,.1); border:1.5px solid var(--sig2); font-size:14.5px; color:var(--ink);
+    animation:pop .35s var(--ease)}
+  .coach b{color:var(--sig)}
+  .coach .cx{margin-left:auto; cursor:pointer; color:var(--mut2); font-size:18px; line-height:1; transition:.15s}
+  .coach .cx:hover{color:var(--ink)}
+
+  /* ====== ПАНЕЛЬ НАСТРОЕК ====== */
+  .iconbtn{padding:11px 14px; font-size:17px; line-height:1}
+  .wizbox.set{max-width:560px; text-align:left; max-height:88vh; overflow-y:auto; padding:34px 38px}
+  .wizbox.set::-webkit-scrollbar{width:8px} .wizbox.set::-webkit-scrollbar-thumb{background:var(--line2); border-radius:8px}
+  .setclose{position:absolute; top:20px; right:22px; width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+    color:var(--mut); cursor:pointer; border:1px solid var(--line2); transition:.18s var(--ease); z-index:2; font-size:15px}
+  .setclose:hover{color:var(--ink); border-color:var(--mut2); transform:rotate(90deg)}
+  .seth{font-family:var(--display); font-size:26px; font-weight:800; letter-spacing:-.02em; margin-bottom:6px}
+  .setsub{font-size:14px; color:var(--mut); margin-bottom:24px; line-height:1.5}
+  .setsec{border:1px solid var(--line); border-radius:18px; background:var(--panel2); padding:20px; margin-bottom:16px;
+    box-shadow:var(--spec)}
+  .setsec .row{display:flex; align-items:center; gap:12px; margin-bottom:6px}
+  .setsec .ttl{font-size:17px; font-weight:700; letter-spacing:-.01em}
+  .setsec .desc{font-size:13.5px; color:var(--mut2); line-height:1.55; margin-bottom:14px}
+  .statuschip{margin-left:auto; font-size:12.5px; font-weight:600; padding:4px 12px; border-radius:20px; white-space:nowrap}
+  .statuschip.on{color:#04130d; background:linear-gradient(180deg,var(--sig),var(--sig2))}
+  .statuschip.off{color:var(--mut); background:rgba(255,255,255,.05); border:1px solid var(--line2)}
+  .setrow2{display:flex; gap:10px; margin-bottom:12px}
+  .setrow2 .wiz, .setrow2 input{margin-bottom:0}
+  .set input{width:100%; font-family:var(--sans); font-size:15.5px; color:var(--ink); background:rgba(8,12,17,.55);
+    border:1.5px solid var(--line2); border-radius:12px; padding:13px 15px; outline:none; transition:.2s var(--ease); margin-bottom:12px}
+  .set input:focus{border-color:var(--sig2); background:rgba(70,243,196,.06); box-shadow:0 0 0 4px rgba(70,243,196,.1)}
+  .setbtn{font-size:15px; font-weight:700; padding:13px 22px; border-radius:13px; border:none; cursor:pointer;
+    background:linear-gradient(180deg,var(--sig),var(--sig2)); color:#04130d; transition:.2s var(--ease);
+    box-shadow:0 8px 24px -10px rgba(70,243,196,.5), inset 0 1px 0 rgba(255,255,255,.4)}
+  .setbtn:hover{transform:translateY(-2px); box-shadow:0 14px 32px -10px rgba(70,243,196,.62)}
+  .setbtn.sec{background:var(--panel); color:var(--ink); border:1.5px solid var(--line2); box-shadow:none}
+  .setbtn:disabled{opacity:.5; pointer-events:none}
+  .setmsg{font-size:13px; margin-top:10px; line-height:1.5}
+  .setmsg.ok{color:var(--sig)} .setmsg.err{color:var(--bad)}
+  .cmd{display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:13px; color:var(--ink);
+    background:#05080c; border:1px solid var(--line2); border-radius:11px; padding:11px 14px; margin:6px 0 14px}
+  .cmd code{flex:1; overflow-x:auto; white-space:nowrap}
+  .cmd .copy{cursor:pointer; color:var(--mut); font-size:12px; padding:3px 9px; border:1px solid var(--line2); border-radius:7px; transition:.15s; flex:0 0 auto}
+  .cmd .copy:hover{color:var(--sig); border-color:var(--sig2)}
+  .step-n{display:inline-grid; place-items:center; width:20px; height:20px; border-radius:50%; background:rgba(70,243,196,.12);
+    color:var(--sig); font-size:11.5px; font-weight:700; margin-right:8px; font-family:var(--mono)}
+  .tgstep{font-size:13.5px; color:var(--mut); line-height:1.7; margin-bottom:8px}
+  .tgstep a{color:var(--sig); text-decoration:none}
+
+  /* каналы со СВИТЧЕРАМИ (правильный iOS-капсульный toggle) */
+  .chanrow{display:flex; align-items:center; gap:11px; padding:11px 4px; border-bottom:1px solid var(--line)}
+  .chanrow:last-child{border-bottom:0}
+  .chanrow .ci{width:26px; text-align:center; font-size:15px}
+  .chanrow b{font-size:14.5px; font-weight:600}
+  .chanrow small{display:block; font-size:11.5px; color:var(--mut2); font-weight:400}
+  .switch{margin-left:auto; position:relative; width:48px; height:28px; flex:0 0 auto; cursor:pointer}
+  .switch input{opacity:0; width:0; height:0; position:absolute}
+  .track{position:absolute; inset:0; border-radius:999px; background:rgba(255,255,255,.1);
+    border:1px solid var(--line2); transition:.28s var(--ease); box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+  .knob{position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff;
+    box-shadow:0 2px 5px rgba(0,0,0,.4); transition:.28s var(--ease)}
+  .switch input:checked + .track{background:linear-gradient(180deg,var(--sig),var(--sig2)); border-color:transparent}
+  .switch input:checked + .track .knob{transform:translateX(20px)}
+  .switch input:disabled ~ .track{opacity:.5}
+
+  /* ====== АДАПТИВ / МОБИЛЬНАЯ ВЁРСТКА ====== */
+  @media (max-width: 860px){
+    body{overflow:auto}
+    .app{grid-template-columns:1fr; height:auto; min-height:100vh}
+    .main{height:auto}
+    .feed{overflow:visible; padding:16px 15px 40px}
+
+    /* сайдбар → липкая верхняя стеклянная плашка */
+    .side{flex-direction:row; align-items:center; gap:14px; height:auto; overflow:hidden;
+      border-right:0; border-bottom:1px solid var(--line); padding:12px 15px;
+      position:sticky; top:0; z-index:30; background:rgba(8,12,18,.72); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass)}
+    .side .seclabel, #sources, .side-foot{display:none}
+    .brand{flex:0 0 auto}
+    .brand small{display:none}
+    .projects{flex-direction:row; gap:8px; overflow-x:auto; flex:1; padding-bottom:2px; -webkit-overflow-scrolling:touch}
+    .projects::-webkit-scrollbar{display:none}
+    .proj{white-space:nowrap; flex:0 0 auto; padding:8px 13px}
+
+    /* шапка перестраивается в колонку */
+    .top{flex-wrap:wrap; gap:11px; padding:15px 15px}
+    .top h1{flex:1 1 100%; order:1; font-size:20px}
+    .stats{order:2; flex:1 1 100%; margin:0; overflow-x:auto; gap:8px; padding-bottom:3px; -webkit-overflow-scrolling:touch}
+    .stats::-webkit-scrollbar{display:none}
+    .stat{flex:1 0 auto; min-width:0; padding:9px 13px}
+    .stat b{font-size:22px}
+    .scan{order:3; flex:1 1 100%; margin:0; justify-content:center; padding:14px}
+
+    .hint{font-size:13px; gap:10px}
+    .hint span:last-child{display:none}
+
+    /* карточки — компактнее, кнопки тянутся */
+    .chead{padding:14px 16px 11px; flex-wrap:wrap; gap:8px}
+    .meta{gap:11px}
+    .quote, .why, .draft{margin-left:16px; margin-right:16px}
+    .actions{padding:14px 16px 16px; flex-wrap:wrap}
+    .actions .btn{flex:1 1 auto; justify-content:center}
+    .actions .link{margin-left:0; flex:1 1 100%; justify-content:center; padding-top:4px}
+    .coach{margin-left:16px; margin-right:16px}
+
+    /* мастер настройки под телефон */
+    .wiz{padding:0; align-items:stretch; overflow-y:auto}
+    .wizbox{max-width:none; border-radius:0; min-height:100vh; padding:34px 22px 30px;
+      display:flex; flex-direction:column; justify-content:center}
+    .wizscreen h2{font-size:27px}
+    .wizscreen p{font-size:16px}
+    .wizscreen .big{width:64px;height:64px}
+    .wizbtns{flex-wrap:wrap}
+    .wbtn.go{max-width:none; flex:1 1 100%; order:1}
+    .wbtn.ghost{flex:1 1 100%; order:2}
+  }
+
+  @media (max-width: 440px){
+    .wizscreen h2{font-size:24px}
+    .top h1{font-size:18px}
+    .stat b{font-size:20px}
+    .langtag{display:none}
+    .quote{font-size:15px}
+    .draft textarea{font-size:15.5px}
+  }
+
+  /* мягче для тех, кто не любит анимации */
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.01ms!important; transition-duration:.05ms!important}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="radar"></div>
+      <div><b>Signal<span>OS</span></b><small>Radar лидов</small></div>
+    </div>
+
+    <div class="seclabel">Проекты</div>
+    <div class="projects" id="projects"></div>
+
+    <div class="seclabel" style="margin-top:6px">Источники</div>
+    <div class="sources" id="sources"></div>
+
+    <div class="side-foot">
+      <div class="addproj" onclick="addProduct()">+ Добавить продукт</div>
+      <div class="pill demo" id="modepill"><span class="live"></span> <b id="modetxt" style="color:var(--ink)">Демо-режим</b></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="top">
+      <h1 id="feedtitle">Твои клиенты <small id="feedsub"></small></h1>
+      <button class="btn go scan" id="scanbtn" onclick="scanNow()">🔍 Найти клиентов</button>
+      <button class="btn iconbtn" id="setbtn" onclick="openSettings()" title="Настройки и ключи">⚙</button>
+      <div class="stats">
+        <div class="stat"><b id="st-today">—</b><span>найдено за сутки</span></div>
+        <div class="stat s"><b id="st-queue">—</b><span>ждут ответа</span></div>
+        <div class="stat h"><b id="st-hot">—</b><span>🔥 горячих</span></div>
+        <div class="stat"><b id="st-done">0</b><span>ответил</span></div>
+      </div>
+    </header>
+
+    <div class="feed" id="feed">
+      <div class="hint">
+        <span>📋 Скопируй ответ → открой оригинал → вставь и отправь</span>
+        <span style="margin-left:auto; color:var(--mut2)">Горячие клавиши: <span class="kbd">A</span>скопировать <span class="kbd">S</span>пропустить <span class="kbd">J</span><span class="kbd">K</span>листать</span>
+      </div>
+      <div id="cards"></div>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- ====== МАСТЕР НАСТРОЙКИ ====== -->
+<div class="wiz" id="wiz">
+  <div class="wizbox">
+    <div class="wizdots" id="wizdots"></div>
+    <div class="wizscreen" id="wizscreen"></div>
+  </div>
+</div>
+
+<!-- ====== ПАНЕЛЬ НАСТРОЕК ====== -->
+<div class="wiz" id="settings">
+  <div class="wizbox set">
+    <div class="setclose" onclick="closeSettings()">✕</div>
+    <div id="setbody"></div>
+  </div>
+</div>
+
+<script>
+/* ============ РЕЖИМ: LIVE (через сервер) или ДЕМО (открыт как файл) ============ */
+const LIVE = location.protocol.startsWith('http');
+
+const DEMO_PROJECTS = [
+  {id:'audit',  name:'ROCH Audit',  color:'#E1FE71', link:'roch-audit.com'},
+  {id:'beauty', name:'Beauty Bot',  color:'#ff8ac4', link:'@beautybot'},
+  {id:'trust',  name:'AllTrustMe',  color:'#5b8cff', link:'@alltrustme'},
+];
+const DEMO_SOURCES = [
+  {id:'hackernews', enabled:true,  label:'HackerNews'},
+  {id:'reddit',     enabled:true,  label:'Reddit'},
+  {id:'bluesky',    enabled:true,  label:'Bluesky'},
+  {id:'lemmy',      enabled:true,  label:'Lemmy'},
+  {id:'rss',        enabled:true,  label:'Google Alerts / RSS'},
+  {id:'telegram',   enabled:false, label:'Telegram'},
+];
+const DEMO_SIGNALS = [
+  {id:1, project:'audit', source:'reddit', source_label:'r/startups', lang:'en', temp:'hot', strength:5, conf:94, ago:'7 мин',
+   url:'https://reddit.com', text:'Running 4 products at once, my head is spinning, no idea what to focus on, everything is on fire. Can anyone recommend how to bring order to this chaos? A coach? Consultant?',
+   hl:['recommend','chaos'], why:'Прямой запрос на помощь с founder-хаосом и приоритизацией — ядро позиционирования ROCH Audit.',
+   draft:'Been there with 20+ products. What helped me wasn’t time-management but a weekly audit — zoom out, pick ONE next move, park the rest. I packaged this into a format, happy to share a free teardown if useful, no pitch.'},
+  {id:2, project:'beauty', source:'telegram', source_label:'TG · Бьюти-мастера', lang:'ru', temp:'hot', strength:5, conf:91, ago:'22 мин',
+   url:'#', text:'Девочки, кто чем ведёт запись? Тону в сообщениях директа и вотсапа, половину клиентов теряю просто потому что не успеваю ответить. Нужен какой-то бот наверное?',
+   hl:['ведёт запись','бот'], why:'Явная боль (потеря клиентов) + сама предлагает «бот» — точное совпадение с Beauty Bot.',
+   draft:'О, это прям классическая боль 🙈 У нас жена-косметолог так же теряла клиентов в директе. Сейчас отвечает бот в WhatsApp и Instagram + сам ведёт запись, а она только подтверждает. Если хочешь — покажу как настроено.'},
+  {id:3, project:'trust', source:'rss', source_label:'Google Alerts', lang:'ru', temp:'warm', strength:4, conf:88, ago:'41 мин',
+   url:'#', text:'Подскажите где в Батуми лучше менять USDT на лари без грабительского курса? В банках совсем грустно, а на улице страшно.',
+   hl:['менять USDT','Батуми'], why:'Конкретный intent на обмен USDT→лари в Грузии — ровно сервис AllTrustMe.',
+   draft:'По курсу выгоднее всего P2P, но важно через кого. Мы делаем обменник под Грузию (USDT/лари) с прозрачным курсом и без сюрпризов — могу скинуть, посчитаешь сам выгодно или нет.'},
+  {id:4, project:'audit', source:'hackernews', source_label:'HackerNews', lang:'en', temp:'cold', strength:2, conf:61, ago:'1 ч',
+   url:'https://news.ycombinator.com', text:'Launched my third product this year, again silence. I can build, but selling... guess it’s not for me. How did you all find your first customers?',
+   hl:['first customers'], why:'Боль с привлечением клиентов — релевантно, но запрос общий. Лучше ответить пользой, продукт мягко.',
+   draft:'Same story here. Realized the problem wasn’t the product, it was building in a vacuum with no market feedback. What helped: stop building new things and sit down to figure out why the current one isn’t selling. Happy to take a fresh look if useful.'},
+  {id:5, project:'beauty', source:'reddit', source_label:'r/beauty', lang:'en', temp:'warm', strength:3, conf:74, ago:'2 ч',
+   url:'https://reddit.com', text:'Do these booking bots for salons actually work? Or is it a scam? Afraid it’ll scare clients off with a robot.',
+   hl:['booking bots','work'], why:'Возражение по категории Beauty Bot — «тёплый скептик». Снять страх кейсом, не продавать в лоб.',
+   draft:'Not a scam, but it depends on setup. The key is it sounds human and instantly hands tricky cases to you. Our clients often don’t even realize it’s a bot — it’s a normal conversation, not a robot-menu. Can show you a real salon’s chat.'},
+];
+
+/* ============ СОСТОЯНИЕ ============ */
+let PROJECTS = [], SOURCES = [], QUEUE = [];
+let filter = 'all', sel = 0, done = 0, claudeOn = false, scanning = false, totalToday = 0;
+
+const projColor = id => (PROJECTS.find(p=>p.id===id)||{}).color || '#46f3c4';
+const projName  = id => (PROJECTS.find(p=>p.id===id)||{}).name || id;
+const visible   = () => QUEUE.filter(s => filter==='all' || s.project===filter);
+const srcIcon   = s => ({hackernews:'Y', reddit:'👽', bluesky:'🦋', lemmy:'🐭', rss:'📡', telegram:'✈'}[s] || '◎');
+
+async function api(path, opts){ const r = await fetch(path, opts); if(!r.ok) throw new Error(r.status); return r.json(); }
+
+/* ============ ЗАГРУЗКА ============ */
+async function init(){
+  if(!LIVE){ demoMode(); renderAll(); return; }   // открыт как файл → демо
+  try{
+    const status = await api('/api/status'); claudeOn = status.claude;
+    if(!status.configured){ openWizard(); return; }   // первый запуск → мастер настройки
+    await loadMain();
+    if(status.scanning){ scanning = true; pollScan(); }
+  }catch(e){ demoMode(); renderAll(); }
+}
+async function loadMain(){
+  PROJECTS = await api('/api/projects');
+  const src = await api('/api/sources'); SOURCES = src.sources; claudeOn = src.claude;
+  await reloadQueue();
+  setMode(true);
+  renderAll();
+}
+function demoMode(){
+  PROJECTS = DEMO_PROJECTS; SOURCES = DEMO_SOURCES;
+  QUEUE = DEMO_SIGNALS.map(s=>({...s})); totalToday = QUEUE.length;
+  setMode(false);
+}
+async function reloadQueue(){
+  QUEUE = await api('/api/queue' + (filter!=='all' ? '?project='+filter : ''));
+  try{ const st = await api('/api/stats'); totalToday = st.today; }catch(e){ totalToday = QUEUE.length; }
+}
+function setMode(live){
+  const pill = document.getElementById('modepill');
+  pill.classList.toggle('demo', !live);
+  document.getElementById('modetxt').textContent = live
+    ? ('Живой режим · Claude ' + (claudeOn ? 'ON' : 'OFF'))
+    : 'Демо-режим';
+}
+
+/* ============ РЕНДЕР ============ */
+function renderAll(){ renderProjects(); renderSources(); renderCards(); }
+
+function renderProjects(){
+  const counts = {}; QUEUE.forEach(s=> counts[s.project]=(counts[s.project]||0)+1);
+  const all = QUEUE.length;
+  document.getElementById('projects').innerHTML =
+    `<div class="proj ${filter==='all'?'on':''}" onclick="setFilter('all')">
+       <span class="dot" style="color:#fff"></span> Все проекты <span class="cnt">${all}</span></div>` +
+    PROJECTS.map(p=>`
+     <div class="proj ${filter===p.id?'on':''}" onclick="setFilter('${p.id}')">
+       <span class="dot" style="color:${p.color}"></span> ${p.name}
+       <span class="cnt">${counts[p.id]||0}</span></div>`).join('');
+}
+
+function renderSources(){
+  document.getElementById('sources').innerHTML = SOURCES.map(s=>`
+    <div class="srcrow ${s.enabled?'on':'off'}">
+      <span class="d"></span> <span>${srcIcon(s.id)}</span> <b style="font-weight:500">${s.label}</b>
+      <small>${s.enabled?'вкл':'выкл'}</small></div>`).join('');
+}
+
+function highlight(text, words){
+  let t = text;
+  (words||[]).forEach(w=>{ if(w) t = t.split(w).join(`<span class="hl">${w}</span>`); });
+  return t;
+}
+
+function renderCards(){
+  const box = document.getElementById('cards');
+  const list = visible();
+  if(sel>=list.length) sel = Math.max(0, list.length-1);
+
+  if(!list.length){
+    box.innerHTML = onboardingHTML();
+    updateStats(); return;
+  }
+
+  box.innerHTML = list.map((s,i)=>`
+    <div class="card ${i===sel?'sel':''}" data-temp="${s.temp}" data-id="${s.id}" style="animation-delay:${Math.min(i*0.05,0.5)}s" onclick="select(${i})">
+      <div class="accent"></div>
+      <div class="chead">
+        <div class="src"><span class="ic">${srcIcon(s.source)}</span> <b>${s.source_label||s.chat||''}</b>
+          <span class="langtag">${(s.lang||'').toUpperCase()}</span></div>
+        <div class="meta">
+          <span class="tag" style="background:${projColor(s.project)}22; color:${projColor(s.project)}">
+            <span class="dot" style="color:${projColor(s.project)}"></span>${projName(s.project)}</span>
+          <div class="strength l${s.strength}">
+            <div class="bars"><i></i><i></i><i></i><i></i><i></i></div>
+            <small>${s.conf}%</small>
+          </div>
+          <span class="ago">${s.ago||''}</span>
+        </div>
+      </div>
+
+      ${i===0 && !coachDone() ? `<div class="coach"><b>👇 Что делать:</b> нажми «Скопировать ответ», открой оригинал, вставь и отправь. Всё! <span class="cx" onclick="event.stopPropagation();dismissCoach()">✕</span></div>` : ''}
+
+      <div class="quote">
+        <div class="h">💬 Что человек написал</div>
+        ${highlight(s.text, s.hl)}
+      </div>
+
+      <div class="why">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${projColor(s.project)}" stroke-width="2">
+          <circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+        <span><b style="color:var(--ink)">Почему это твой клиент:</b> ${s.why}</span>
+      </div>
+
+      <div class="draft">
+        <div class="h"><span class="ai">✦ Готовый ответ</span> · ${claudeOn?'написан Claude':'заготовка'} · правь как хочешь</div>
+        <textarea id="ta-${s.id}" oninput="autosize(this)">${(s.draft||'').replace(/</g,'&lt;')}</textarea>
+      </div>
+
+      <div class="actions">
+        <button class="btn go" onclick="event.stopPropagation();approve(${s.id})">📋 Скопировать ответ <span class="k">A</span></button>
+        ${s.url && s.url!=='#' ? `<a class="btn" href="${s.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ Открыть и ответить</a>` : ''}
+        <button class="btn skip" onclick="event.stopPropagation();skip(${s.id})">Не моё <span class="k">S</span></button>
+      </div>
+    </div>`).join('');
+
+  document.querySelectorAll('#cards textarea').forEach(autosize);
+  updateStats();
+}
+
+function onboardingHTML(){
+  if(!LIVE){
+    return `<div class="empty"><div class="radar"></div><h3>Это демо 🎯</h3>
+      <div>Чтобы радар искал <b>реальных</b> клиентов — запусти <code>./run.sh</code> в папке signalos.</div></div>`;
+  }
+  if(scanning){
+    return `<div class="empty"><div class="radar"></div><h3>Ищу твоих клиентов…</h3>
+      <div>Радар прочёсывает интернет. Первые люди появятся здесь через минуту — можно не ждать, вкладка обновится сама.</div></div>`;
+  }
+  return `<div class="empty"><div class="radar"></div>
+    <h3>Пока тихо — но радар на связи 🛰</h3>
+    <div style="max-width:440px;margin:0 auto 18px">Новых клиентов прямо сейчас не нашлось. Я проверяю источники каждые 15 минут сам. Можешь поискать вручную:</div>
+    <button class="btn go" onclick="scanNow()">🔍 Найти клиентов сейчас</button></div>`;
+}
+
+function updateStats(){
+  const q = QUEUE.length;
+  const hot = QUEUE.filter(s=>s.temp==='hot').length;
+  setNum('st-today', totalToday || q);
+  setNum('st-queue', q);
+  setNum('st-hot', hot);
+  setNum('st-done', done);
+  document.getElementById('feedsub').textContent = '· ' + (filter==='all'?'все проекты':projName(filter)) + ' · ' + q + ' в работе';
+}
+function setNum(id, to){
+  const el = document.getElementById(id); if(!el) return;
+  const from = parseInt(el.textContent) || 0;
+  if(from===to){ el.textContent = to; return; }
+  const t0 = performance.now(), dur = 480;
+  function step(t){
+    const k = Math.min(1, (t-t0)/dur);
+    el.textContent = Math.round(from + (to-from)*(1-Math.pow(1-k,3)));
+    if(k<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ============ ДЕЙСТВИЯ ============ */
+async function setFilter(f){ filter=f; sel=0; if(LIVE){ try{ await reloadQueue(); }catch(e){} } renderAll(); }
+function select(i){ sel=i; document.querySelectorAll('.card').forEach((c,n)=>c.classList.toggle('sel',n===i));
+  const c=document.querySelectorAll('.card')[i]; if(c) c.scrollIntoView({block:'nearest'}); }
+
+function removeCard(id, cb){
+  const card = document.querySelector(`.card[data-id="${id}"]`);
+  if(card){ card.style.maxHeight = card.offsetHeight+'px'; requestAnimationFrame(()=>card.classList.add('gone')); }
+  setTimeout(()=>{ QUEUE = QUEUE.filter(s=>s.id!==id); cb&&cb(); renderAll(); }, 240);
+}
+
+function approve(id){
+  const ta = document.getElementById('ta-'+id);
+  const txt = ta ? ta.value : '';
+  if(navigator.clipboard) navigator.clipboard.writeText(txt).catch(()=>{});
+  if(LIVE) fetch('/api/signal/'+id+'/approve',{method:'POST'}).catch(()=>{});
+  done++; removeCard(id, ()=>toast('Ответ <b>скопирован</b> — открой оригинал, вставь и отправь со своего аккаунта'));
+}
+function skip(id){ if(LIVE) fetch('/api/signal/'+id+'/skip',{method:'POST'}).catch(()=>{}); removeCard(id, ()=>toast('Сигнал пропущен')); }
+function editDraft(id){ const ta=document.getElementById('ta-'+id); if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length);} }
+function autosize(el){ el.style.height='auto'; el.style.height=Math.max(84,el.scrollHeight)+'px'; }
+
+/* ============ СКАН ============ */
+async function scanNow(){
+  if(!LIVE){ toast('Демо-режим. Запусти <b>./run.sh</b> — и радар начнёт ловить реальных людей'); return; }
+  if(scanning) return;
+  scanning = true;
+  const btn = document.getElementById('scanbtn'); btn.classList.add('busy'); btn.textContent='';
+  toast('Сканирую источники…');
+  try{
+    const res = await fetch('/api/scan',{method:'POST'}).then(r=>r.json());
+    await reloadQueue();
+    toast(`Найдено <b>${res.signals||0}</b> новых сигналов из ${res.fetched||0} сообщений`);
+  }catch(e){ toast('Ошибка сканирования'); }
+  scanning = false;
+  btn.classList.remove('busy'); btn.textContent='⟳ Сканировать';
+  renderAll();
+}
+async function pollScan(){
+  for(let i=0;i<20 && scanning;i++){
+    await new Promise(r=>setTimeout(r,2500));
+    try{ const s = await api('/api/sources'); scanning = s.scanning; }catch(e){ break; }
+  }
+  try{ await reloadQueue(); renderAll(); }catch(e){}
+}
+
+let toastT;
+function toast(msg){ const t=document.getElementById('toast'); t.innerHTML=msg; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000); }
+
+/* ============ КЛАВИАТУРА ============ */
+document.addEventListener('keydown', e=>{
+  // открыты мастер или настройки — горячие клавиши очереди не работают
+  const wizOpen = document.getElementById('wiz').classList.contains('show');
+  const setOpen = document.getElementById('settings').classList.contains('show');
+  if(e.key==='Escape' && setOpen){ closeSettings(); return; }
+  if(wizOpen || setOpen) return;
+  if(e.target.tagName==='TEXTAREA' || e.target.tagName==='INPUT'){ if(e.key==='Escape') e.target.blur(); return; }
+  const list = visible(); if(!list.length){ if(e.key==='r') scanNow(); return; }
+  const cur = list[sel];
+  if(e.key==='j'||e.key==='ArrowDown'){ e.preventDefault(); sel=Math.min(list.length-1,sel+1); select(sel); }
+  else if(e.key==='k'||e.key==='ArrowUp'){ e.preventDefault(); sel=Math.max(0,sel-1); select(sel); }
+  else if(e.key==='a'&&cur){ e.preventDefault(); approve(cur.id); }
+  else if(e.key==='s'&&cur){ e.preventDefault(); skip(cur.id); }
+  else if(e.key==='e'&&cur){ e.preventDefault(); editDraft(cur.id); }
+  else if(e.key==='r'){ e.preventDefault(); scanNow(); }
+});
+
+/* ============ ПОДСКАЗКА НА ПЕРВОЙ КАРТОЧКЕ ============ */
+function coachDone(){ try{ return localStorage.getItem('sos_coach')==='1'; }catch(e){ return false; } }
+function dismissCoach(){ try{ localStorage.setItem('sos_coach','1'); }catch(e){} renderCards(); }
+
+/* ============ МАСТЕР НАСТРОЙКИ ============ */
+const WIZ = {step:0, description:'', link:'', name:'', phrases:[], tone:'', subreddits:[], alerts:[], smart:false, newchip:''};
+const STEPS = 3;
+const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function openWizard(){ WIZ.step=0; document.getElementById('wiz').classList.add('show'); renderWiz(); }
+function addProduct(){
+  if(!LIVE){ toast('Запусти <b>./run.sh</b>, чтобы добавлять продукты'); return; }
+  WIZ.description=''; WIZ.link=''; WIZ.name=''; WIZ.phrases=[]; WIZ.newchip='';
+  openWizard();
+}
+function closeWizard(){ document.getElementById('wiz').classList.remove('show'); }
+
+function renderWiz(){
+  document.getElementById('wizdots').innerHTML =
+    Array.from({length:STEPS}, (_,i)=>`<i class="${i===WIZ.step?'on':''}"></i>`).join('');
+  const el = document.getElementById('wizscreen');
+  if(WIZ.step===0) el.innerHTML = wizWelcome();
+  else if(WIZ.step===1) el.innerHTML = wizDescribe();
+  else if(WIZ.step===2) el.innerHTML = wizConfirm();
+  else el.innerHTML = wizFinishing();
+}
+
+function wizWelcome(){
+  return `<div class="radar big"></div>
+    <h2>Я найду тебе <span>клиентов</span><br>пока ты занят делом</h2>
+    <p>Каждый день в интернете люди пишут «посоветуйте…», «ищу…», «как мне…». Среди них — твои будущие клиенты. Я их нахожу и готовлю ответ. Тебе остаётся вставить и отправить.<br><br>Без рекламы. Без блога. Без бюджета.</p>
+    <div class="wizbtns"><button class="wbtn go glow" onclick="wizGo(1)">Поехали →</button></div>
+    <div class="sub">Займёт 1 минуту. Ничего технического.</div>`;
+}
+
+function wizDescribe(){
+  return `<h2>Что ты продаёшь?</h2>
+    <p>Опиши простыми словами, как другу. Что это и кому помогает.</p>
+    <div class="left">
+      <label class="wizlabel">Твой продукт</label>
+      <textarea id="w-desc" oninput="WIZ.description=this.value; document.getElementById('w-next').disabled=this.value.trim().length<8" placeholder="Например: бот для записи клиентов для бьюти-мастеров. Отвечает в WhatsApp и Instagram, чтобы мастер не терял клиентов из директа.">${esc(WIZ.description)}</textarea>
+      <div class="wizex" onclick="fillExample()">💡 Не знаешь как? <b>Нажми</b> — подставлю пример, а ты поправишь под себя.</div>
+      <label class="wizlabel">Ссылка на продукт <span style="color:var(--mut2); font-weight:400">(необязательно)</span></label>
+      <input id="w-link" value="${esc(WIZ.link)}" oninput="WIZ.link=this.value" placeholder="например roch-audit.com или @твой_бот">
+    </div>
+    <div class="wizbtns">
+      <button class="wbtn ghost" onclick="wizGo(0)">← Назад</button>
+      <button class="wbtn go" id="w-next" onclick="wizSuggest()" ${WIZ.description.trim().length<8?'disabled':''}>Дальше →</button>
+    </div>`;
+}
+
+function wizFinishing(text){
+  return `<div class="wizspin"></div>
+    <h2>${text||'Подбираю фразы…'}</h2>
+    <p>${WIZ.smart?'Claude анализирует твой продукт':'Готовлю радар'} — пара секунд.</p>`;
+}
+
+function wizConfirm(){
+  const chips = WIZ.phrases.map((p,i)=>`<span class="chip">${esc(p)} <x onclick="rmChip(${i})">✕</x></span>`).join('');
+  return `<h2>Кого мне искать?</h2>
+    ${WIZ.smart?'<div class="smartbadge">✦ Claude подобрал это под твой продукт</div>':''}
+    <p>Это фразы, которые пишет человек, когда ему нужен <b style="color:var(--ink)">твой</b> продукт. Убери лишнее, добавь своё.</p>
+    <div class="left">
+      <label class="wizlabel">Название продукта</label>
+      <input id="w-name" value="${esc(WIZ.name)}" oninput="WIZ.name=this.value" placeholder="Beauty Bot">
+      <label class="wizlabel" style="margin-top:14px">Что пишут твои клиенты</label>
+      <div class="chips">${chips || '<span style="color:var(--mut2);font-size:12.5px">пока пусто — добавь фразу ниже</span>'}</div>
+      <div class="chipadd">
+        <input id="w-chip" value="${esc(WIZ.newchip)}" oninput="WIZ.newchip=this.value" onkeydown="if(event.key==='Enter')addChip()" placeholder="например: ищу бота для записи">
+        <button class="wbtn" onclick="addChip()" style="padding:13px 18px">+ Добавить</button>
+      </div>
+    </div>
+    <div class="wizbtns">
+      <button class="wbtn ghost" onclick="wizGo(1)">← Назад</button>
+      <button class="wbtn go" onclick="wizFinish()" ${WIZ.phrases.length?'':'disabled'}>🛰 Включить радар</button>
+    </div>`;
+}
+
+function wizGo(step){ WIZ.step=step; renderWiz(); }
+function fillExample(){
+  WIZ.description = 'Бот для записи клиентов для бьюти-мастеров. Отвечает за них в WhatsApp и Instagram, ведёт запись, чтобы мастер не терял клиентов из директа.';
+  renderWiz();
+}
+function rmChip(i){ WIZ.phrases.splice(i,1); renderWiz(); }
+function addChip(){
+  const v = (WIZ.newchip||'').trim();
+  if(v){ WIZ.phrases.push(v); WIZ.newchip=''; }
+  renderWiz(); const inp=document.getElementById('w-chip'); if(inp) inp.focus();
+}
+
+async function wizSuggest(){
+  WIZ.step = 99; renderWiz();
+  try{
+    const s = await api('/api/suggest', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({description: WIZ.description})});
+    WIZ.phrases = s.phrases||[]; WIZ.name = s.name||''; WIZ.tone = s.tone||'';
+    WIZ.subreddits = s.subreddits||[]; WIZ.alerts = s.alerts||[]; WIZ.smart = !!s.smart;
+  }catch(e){ WIZ.phrases = WIZ.phrases.length?WIZ.phrases:['ищу','посоветуйте']; }
+  WIZ.step = 2; renderWiz();
+}
+
+async function wizFinish(){
+  WIZ.step = 99; renderWiz();
+  document.getElementById('wizscreen').innerHTML = wizFinishing('Включаю радар и ищу первых клиентов…');
+  try{
+    await api('/api/setup', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({description:WIZ.description, link:WIZ.link, name:WIZ.name,
+        phrases:WIZ.phrases, tone:WIZ.tone, subreddits:WIZ.subreddits, alerts:WIZ.alerts})});
+    scanning = true;
+    closeWizard();
+    await loadMain();
+    toast('🛰 Радар включён! Ищу первых клиентов — они появятся через минуту');
+    pollScan();
+  }catch(e){ document.getElementById('wizscreen').innerHTML = wizConfirm(); toast('Ошибка настройки, попробуй ещё раз'); }
+}
+
+/* ============ ПАНЕЛЬ НАСТРОЕК (state-driven) ============ */
+const SET = {status:null, sources:[], tgState:'idle', msg:'', msgC:'', cmsg:'', cmsgC:'',
+  tg:{api_id:'',api_hash:'',phone:'',code:'',password:'',chats:''}};
+
+async function openSettings(){
+  if(!LIVE){ toast('Запусти <b>./run.sh</b>, чтобы открыть настройки'); return; }
+  document.getElementById('settings').classList.add('show');
+  document.getElementById('setbody').innerHTML = '<div class="wizspin" style="margin:50px auto"></div>';
+  try{
+    SET.status = await api('/api/settings');
+    SET.sources = (await api('/api/sources')).sources;
+    SET.tg.chats = (SET.status.telegram.chats||[]).join(', ');
+    SET.tgState = SET.status.telegram.connected ? 'connected' : 'idle';
+    SET.msg=''; SET.msgC=''; SET.cmsg=''; SET.cmsgC='';
+    renderSettings();
+  }catch(e){ document.getElementById('setbody').innerHTML = '<div class="seth">Настройки</div><p style="color:var(--mut)">Не удалось загрузить.</p>'; }
+}
+function closeSettings(){ document.getElementById('settings').classList.remove('show'); }
+
+function renderSettings(){
+  const st = SET.status||{}, tg = st.telegram||{}, T = SET.tg;
+  const conn = SET.tgState==='connected';
+  document.getElementById('setbody').innerHTML = `
+    <div class="seth">Настройки</div>
+    <div class="setsub">Вставь данные в поля — всё применится сразу, без перезапуска и терминала.</div>
+
+    <div class="setsec">
+      <div class="row"><span class="ttl">✈ Telegram</span>
+        <span class="statuschip ${conn?'on':'off'}">${conn?'подключён':'не подключён'}</span></div>
+      ${conn ? tgConnectedHTML() : tgLoginHTML(T)}
+      <div class="setmsg ${SET.msgC}" id="tg-msg">${SET.msg}</div>
+    </div>
+
+    <div class="setsec">
+      <div class="row"><span class="ttl">📡 Каналы поиска</span></div>
+      <div class="desc">Где радар ищет клиентов. Включай и выключай как хочешь.</div>
+      ${SET.sources.map(s=>`
+        <div class="chanrow">
+          <span class="ci">${srcIcon(s.id)}</span>
+          <div><b>${s.label}</b><small>${s.id==='telegram' ? (conn?'подключён':'войди выше') : 'без ключей, бесплатно'}</small></div>
+          <label class="switch"><input type="checkbox" ${s.enabled?'checked':''} ${s.id==='telegram'&&!conn?'disabled':''} onchange="toggleChannel('${s.id}', this.checked)">
+            <span class="track"><span class="knob"></span></span></label>
+        </div>`).join('')}
+    </div>
+
+    <div class="setsec">
+      <div class="row"><span class="ttl">✦ Умный режим (Claude)</span>
+        <span class="statuschip ${st.claude?'on':'off'}">${st.claude?'включён':'выключен'}</span></div>
+      <div class="desc">С ключом подсказки фраз и готовые ответы становятся как от живого эксперта. Ключ — на console.anthropic.com, стоит копейки. (Можно позже.)</div>
+      <input id="set-claude" type="password" placeholder="${st.claude ? 'Сохранён '+st.claude_masked+' — вставь новый' : 'sk-ant-...'}">
+      <button class="setbtn" onclick="saveClaude()">Сохранить и проверить</button>
+      <div class="setmsg ${SET.cmsgC}" id="claude-msg">${SET.cmsg}</div>
+    </div>`;
+}
+
+function tgLoginHTML(T){
+  if(SET.tgState==='code' || SET.tgState==='password'){
+    return `<div class="desc">Код отправлен в Telegram на <b style="color:var(--ink)">${esc(T.phone)}</b>. Введи его ниже (он приходит в чат «Telegram»).</div>
+      <input id="tg-code" inputmode="numeric" placeholder="Код из Telegram" value="${esc(T.code)}" oninput="SET.tg.code=this.value">
+      ${SET.tgState==='password' ? `<input id="tg-pass" type="password" placeholder="Облачный пароль (2FA)" value="${esc(T.password)}" oninput="SET.tg.password=this.value">` : ''}
+      <button class="setbtn" onclick="tgSignIn()">Войти</button>
+      <button class="setbtn sec" onclick="SET.tgState='idle';SET.msg='';renderSettings()" style="margin-left:8px">Назад</button>`;
+  }
+  return `<div class="desc">Твоя CIS/Батуми аудитория. У Telegram нет бесплатного публичного API — нужен одноразовый вход своим аккаунтом. Всё прямо здесь, без терминала.</div>
+    <div class="tgstep"><span class="step-n">1</span> Получи <b>api_id</b> и <b>api_hash</b> на <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a> → API development tools</div>
+    <div class="setrow2">
+      <input id="tg-id" inputmode="numeric" placeholder="api_id (число)" value="${esc(T.api_id)}" oninput="SET.tg.api_id=this.value">
+      <input id="tg-hash" placeholder="api_hash" value="${esc(T.api_hash)}" oninput="SET.tg.api_hash=this.value">
+    </div>
+    <input id="tg-phone" placeholder="Телефон, напр. +995..." value="${esc(T.phone)}" oninput="SET.tg.phone=this.value">
+    <div class="tgstep"><span class="step-n">2</span> Нажми «Получить код» → код придёт в Telegram → введёшь здесь</div>
+    <button class="setbtn" onclick="tgSendCode()">Получить код</button>`;
+}
+
+function tgConnectedHTML(){
+  return `<div class="desc">✓ Аккаунт подключён. Укажи публичные чаты (через запятую) — радар начнёт искать в них клиентов. Только чтение, без рассылки.</div>
+    <input id="tg-chats" placeholder="startup_chat_ru, batumi_chat" value="${esc(SET.tg.chats)}" oninput="SET.tg.chats=this.value">
+    <button class="setbtn" onclick="tgSaveChats()">Сохранить чаты и включить</button>`;
+}
+
+async function tgSendCode(){
+  if(!/^\d+$/.test((SET.tg.api_id||'').trim()) || (SET.tg.api_hash||'').trim().length<10 || (SET.tg.phone||'').trim().length<5){
+    SET.msg='Заполни api_id (число), api_hash и телефон'; SET.msgC='err'; renderSettings(); return; }
+  SET.msg='Отправляю код…'; SET.msgC=''; renderSettings();
+  try{
+    const r = await api('/api/telegram/send_code',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({api_id:SET.tg.api_id.trim(),api_hash:SET.tg.api_hash.trim(),phone:SET.tg.phone.trim()})});
+    if(r.connected){ SET.tgState='connected'; SET.msg='✓ Уже подключён как '+(r.name||''); SET.msgC='ok'; }
+    else if(r.sent){ SET.tgState='code'; SET.msg='Код отправлен — проверь Telegram'; SET.msgC='ok'; }
+    else { SET.msg=r.error||'Ошибка'; SET.msgC='err'; }
+  }catch(e){ SET.msg='Ошибка отправки'; SET.msgC='err'; }
+  renderSettings();
+}
+
+async function tgSignIn(){
+  SET.msg='Вхожу…'; SET.msgC=''; renderSettings();
+  try{
+    const body = SET.tgState==='password' ? {password:SET.tg.password} : {code:SET.tg.code};
+    const r = await api('/api/telegram/sign_in',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(r.connected){ toast('🛰 Telegram подключён как '+(r.name||'')); openSettings(); return; }
+    else if(r.need_password){ SET.tgState='password'; SET.msg='У тебя включён облачный пароль (2FA) — введи его'; SET.msgC=''; }
+    else { SET.msg=r.error||'Не удалось войти (проверь код)'; SET.msgC='err'; }
+  }catch(e){ SET.msg='Ошибка входа'; SET.msgC='err'; }
+  renderSettings();
+}
+
+async function tgSaveChats(){
+  const chats = (SET.tg.chats||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if(!chats.length){ SET.msg='Добавь хотя бы один чат'; SET.msgC='err'; renderSettings(); return; }
+  SET.msg='Сохраняю…'; SET.msgC=''; renderSettings();
+  try{
+    await api('/api/settings/telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chats})});
+    SET.msg='✓ Чаты сохранены, канал Telegram включён'; SET.msgC='ok';
+    SET.sources=(await api('/api/sources')).sources; renderSources();
+  }catch(e){ SET.msg='Ошибка'; SET.msgC='err'; }
+  renderSettings();
+}
+
+async function saveClaude(){
+  const key=(document.getElementById('set-claude').value||'').trim();
+  if(key.length<12){ SET.cmsg='Вставь ключ целиком'; SET.cmsgC='err'; renderSettings(); return; }
+  SET.cmsg='Проверяю ключ…'; SET.cmsgC=''; renderSettings();
+  try{
+    const r=await api('/api/settings/claude',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+    SET.cmsg=r.msg; SET.cmsgC=r.valid?'ok':'err';
+    if(r.valid){ claudeOn=true; setMode(true); SET.status.claude=true; }
+  }catch(e){ SET.cmsg='Ошибка сохранения'; SET.cmsgC='err'; }
+  renderSettings();
+}
+
+async function toggleChannel(id, on){
+  try{
+    await api('/api/source/'+id+'/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:on})});
+    SET.sources=(await api('/api/sources')).sources; renderSources();
+    toast(on?'Канал включён':'Канал выключен');
+  }catch(e){}
+}
+
+init();
+</script>
+</body>
+</html>

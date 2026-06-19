@@ -1,0 +1,17 @@
+# секреты и личные данные — НИКОГДА в git
+.env
+*.session
+*.session-journal
+signalos.session*
+config/config.json
+
+# локальные данные / рантайм
+signalos.db
+*.db
+.venv/
+__pycache__/
+*.pyc
+
+# системное
+.DS_Store
+/tmp/

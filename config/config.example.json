@@ -1,0 +1,71 @@
+{
+  "_comment": "Скопируй в config/config.json и настрой. projects = под что ловим. sources = где слушаем.",
+
+  "sources": [
+    {
+      "id": "hackernews", "enabled": true, "label": "HackerNews",
+      "needs": "ничего — работает сразу", "max_keywords": 6
+    },
+    {
+      "id": "reddit", "enabled": true, "label": "Reddit",
+      "needs": "ничего — работает сразу", "max_keywords": 5,
+      "subreddits": ["startups", "Entrepreneur", "SaaS", "indiehackers", "smallbusiness"]
+    },
+    {
+      "id": "bluesky", "enabled": true, "label": "Bluesky",
+      "needs": "ничего — работает сразу", "max_keywords": 6
+    },
+    {
+      "id": "lemmy", "enabled": true, "label": "Lemmy",
+      "needs": "ничего — работает сразу", "max_keywords": 5, "instance": "lemmy.world"
+    },
+    {
+      "id": "rss", "enabled": true, "label": "Google Alerts / RSS",
+      "needs": "вставь RSS-ленты (Google Alerts даёт бесплатно, любой язык)",
+      "feeds": [
+        { "label": "пример: Reddit RU-поиск", "url": "https://www.reddit.com/search.rss?q=%D0%BE%D0%B1%D0%BC%D0%B5%D0%BD%20usdt&sort=new" }
+      ]
+    },
+    {
+      "id": "telegram", "enabled": false, "label": "Telegram (твоя CIS-аудитория)",
+      "needs": "Бесплатно за 2 мин: my.telegram.org → API_ID/HASH в .env → python3 -m signalos.tg_login",
+      "chats": ["startup_chat_ru", "batumi_chat"], "per_chat": 40
+    }
+  ],
+
+  "projects": [
+    {
+      "id": "audit", "name": "ROCH Audit", "color": "#E1FE71",
+      "link": "https://roch-audit.com",
+      "one_liner": "Мост для фаундеров из хаоса к следующему ясному шагу — аудит проектов и приоритизация.",
+      "audience": "Фаундеры, индихакеры, владельцы нескольких продуктов в перегрузе",
+      "keywords": ["overwhelmed", "too many projects", "burnout founder", "prioritize", "where to start",
+                   "first customers", "хаос", "выгораю", "много проектов", "навести порядок", "первых клиентов"],
+      "negative_keywords": ["hiring", "job", "вакансия"],
+      "tone": "От первого лица, честно, без булшита. 'Сам через это прошёл'. Помощь раньше продажи.",
+      "min_strength": 3
+    },
+    {
+      "id": "beauty", "name": "Beauty Bot", "color": "#ff8ac4",
+      "link": "https://t.me/your_beauty_bot",
+      "one_liner": "Бот для бьюти-мастеров: авто-ответы и запись в WhatsApp + Instagram, чтобы не терять клиентов из директа.",
+      "audience": "Косметологи, мастера маникюра/бровей, владельцы салонов СНГ",
+      "keywords": ["веду запись", "теряю клиентов", "не успеваю отвечать", "бот для записи", "директ",
+                   "вотсап", "автоответ", "онлайн-запись", "booking bot", "salon booking"],
+      "negative_keywords": ["ищу мастера", "запишите меня"],
+      "tone": "Тепло, по-свойски, женская аудитория. Через личный кейс (жена-косметолог).",
+      "min_strength": 3
+    },
+    {
+      "id": "trust", "name": "AllTrustMe", "color": "#5b8cff",
+      "link": "https://masteroch.github.io/alltrustme",
+      "one_liner": "Крипто-обменник под Грузию: USDT ↔ лари с прозрачным курсом, без сюрпризов.",
+      "audience": "Экспаты и крипто-холдеры в Батуми/Тбилиси",
+      "keywords": ["обмен usdt", "поменять крипту", "курс лари", "обменник батуми", "вывести usdt",
+                   "exchange usdt georgia", "crypto batumi"],
+      "negative_keywords": [],
+      "tone": "Спокойно, по делу, акцент на прозрачность курса и безопасность.",
+      "min_strength": 4
+    }
+  ]
+}
