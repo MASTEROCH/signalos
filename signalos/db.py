@@ -173,6 +173,13 @@ def update_draft(uid, sid, draft):
         c.execute("UPDATE signals SET draft=? WHERE id=? AND user_id=?", (draft, sid, uid))
 
 
+def export_rows(uid):
+    with _c() as c:
+        rows = c.execute("""SELECT source_label, project, temp, strength, conf, text, url, draft, status, created
+                            FROM signals WHERE user_id=? ORDER BY created DESC""", (uid,)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def all_user_ids():
     with _c() as c:
         return [r["user_id"] for r in c.execute("SELECT user_id FROM configs").fetchall()]

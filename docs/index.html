@@ -245,9 +245,8 @@
 
   .scan{margin-left:auto; padding:11px 18px; font-size:14.5px}
   .iconbtn{display:grid; place-items:center}
-  .scan.busy{opacity:.7; pointer-events:none}
-  .scan.busy::after{content:""; width:11px;height:11px; border:2px solid #04130d; border-top-color:transparent;
-    border-radius:50%; display:inline-block; animation:spin .7s linear infinite}
+  .scan.busy{pointer-events:none}
+  .scan.busy .ico{animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
   .sources{display:flex; flex-direction:column; gap:3px}
@@ -1006,7 +1005,7 @@ async function scanNow(){
   if(!LIVE){ toast('Демо-режим. Запусти <b>./run.sh</b> — и радар начнёт ловить реальных людей'); return; }
   if(scanning) return;
   scanning = true; manualScan = true;
-  const btn = document.getElementById('scanbtn'); btn.classList.add('busy'); btn.textContent='';
+  const btn = document.getElementById('scanbtn'); btn.classList.add('busy'); btn.innerHTML = IC.refresh + ' Сканирую…';
   renderCards();                       // радар на весь фид
   const minWait = new Promise(r=>setTimeout(r, 3000));   // дать насладиться сканированием (дольше)
   let res = {};
@@ -1021,7 +1020,10 @@ async function scanNow(){
   scanning = false; manualScan = false;
   btn.classList.remove('busy'); btn.innerHTML = IC.search + ' Найти клиентов';
   justScanned = true; renderAll();
-  if(res && res.signals!=null) toast(`Найдено <b>${res.signals||0}</b> новых клиентов`);
+  if(res && res.signals!=null){
+    toast(`Найдено <b>${res.signals||0}</b> новых клиентов` + (res.spent?` · −${res.spent} токенов`:''));
+    if(res.spent) refreshMe();
+  }
   setTimeout(()=>{ justScanned = false; renderAll(); }, 1900);
 }
 async function pollScan(){
@@ -1537,7 +1539,8 @@ async function pmList(){
   const body=document.getElementById('pmbody'); body.innerHTML='<div class="wizspin" style="margin:60px auto"></div>';
   try{
     const ps=await api('/api/projects');
-    body.innerHTML=`<div class="seth">Мои проекты</div>
+    body.innerHTML=`<div class="seth" style="display:flex;align-items:center;justify-content:space-between">Мои проекты
+        <button class="setbtn sec" style="padding:9px 15px;font-size:13px" onclick="exportCSV()">${ico('ext')} Экспорт CSV</button></div>
       <div class="setsub">Добавляй продукты, меняй фразы, тон и порог — у каждого свой радар.</div>
       <div class="pm-grid">
         ${ps.map(p=>`<div class="pcard"><div class="bar" style="background:${p.color}"></div>
@@ -1553,6 +1556,11 @@ async function pmList(){
   }catch(e){ body.innerHTML='<div class="seth">Мои проекты</div><p style="color:var(--mut)">Не удалось загрузить.</p>'; }
 }
 function pmNew(){ closeProjects(); addProduct(); }
+function exportCSV(){
+  if(!LIVE){ toast('Запусти <b>./run.sh</b>'); return; }
+  const a=document.createElement('a'); a.href='/api/export'; a.download='signalos_leads.csv';
+  document.body.appendChild(a); a.click(); a.remove(); toast('Выгружаю лиды в CSV…');
+}
 
 async function pmEdit(id){
   const body=document.getElementById('pmbody'); body.innerHTML='<div class="wizspin" style="margin:60px auto"></div>';

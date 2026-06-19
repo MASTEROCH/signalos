@@ -158,6 +158,21 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/automation":
             return self._send(200, engine.get_config(uid).get("automation",
                               {"auto_scan": True, "interval_min": PLANS[u["plan"]]["interval"] // 60, "min_strength": 3}))
+        if p == "/api/export":
+            import csv, io
+            rows = db.export_rows(uid)
+            buf = io.StringIO(); w = csv.writer(buf)
+            w.writerow(["Канал", "Проект", "Температура", "Сила", "Достоверность%", "Сообщение", "Ссылка", "Готовый ответ", "Статус", "Дата"])
+            for r in rows:
+                w.writerow([r["source_label"], r["project"], r["temp"], r["strength"], r["conf"],
+                            r["text"], r["url"], r["draft"], r["status"],
+                            time.strftime("%Y-%m-%d %H:%M", time.localtime(r["created"] or 0))])
+            data = ("﻿" + buf.getvalue()).encode("utf-8")   # BOM для Excel
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", "attachment; filename=signalos_leads.csv")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers(); self.wfile.write(data); return
         parts = p.strip("/").split("/")
         if len(parts) == 3 and parts[1] == "project":     # GET полные данные проекта
             pr = engine.get_project(uid, parts[2])
