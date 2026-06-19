@@ -10,6 +10,7 @@ PLATFORM_KEY = os.environ.get("SIGNALOS_PLATFORM_KEY") or os.environ.get("ANTHRO
 COST_REPLY = 1       # токенов за ИИ-ответ на найденного клиента
 COST_REGEN = 2       # за перегенерацию ответа
 COST_SUGGEST = 5     # за умный подбор фраз в мастере
+COST_IMPROVE = 5     # за ИИ-улучшение поисковой выдачи проекта
 
 DEFAULT_SOURCES = [
     {"id": "hackernews", "enabled": True, "label": "HackerNews", "max_keywords": 6},
@@ -62,6 +63,8 @@ def update_project(uid, pid, f):
             if "min_strength" in f:
                 try: p["min_strength"] = max(1, min(5, int(f["min_strength"])))
                 except Exception: pass
+            if "auto_improve" in f:
+                p["auto_improve"] = bool(f["auto_improve"])
             save_config(uid, cfg)
             return p
     return None
@@ -179,6 +182,31 @@ def scan_user(uid):
         summary["by_source"][sid] = found
         summary["signals"] += found
     return summary
+
+
+def improve_project(uid, pid):
+    """ИИ улучшает ключевые фразы проекта под реальные сообщения клиентов (учёт одобрено/пропущено)."""
+    cfg = get_config(uid)
+    proj = next((p for p in cfg.get("projects", []) if p["id"] == pid), None)
+    if not proj:
+        return {"error": "нет проекта"}
+    key, platform = _ai_mode(uid, cfg)
+    if not key:
+        return {"error": "Для ИИ-улучшения нужен Anthropic-ключ (свой в ⚙) или токены платформы.", "need_ai": True}
+    if platform and not db.charge(uid, COST_IMPROVE):
+        return {"error": "Недостаточно токенов", "need_tokens": True}
+    sigs = db.recent_signals(uid, pid, 40)
+    good = [s["text"][:220] for s in sigs if s.get("status") == "approved"][:8]
+    bad = [s["text"][:220] for s in sigs if s.get("status") == "skipped"][:8]
+    res = classifier.improve_keywords(proj, good, bad, key)
+    if res and res.get("keywords"):
+        proj["keywords"] = [k.strip() for k in res["keywords"] if k and k.strip()][:20]
+        import time as _t
+        proj["last_improve"] = _t.time()
+        save_config(uid, cfg)
+        return {"ok": True, "keywords": proj["keywords"], "note": res.get("note", ""),
+                "charged": (COST_IMPROVE if platform else 0)}
+    return {"error": "ИИ не вернул улучшения — попробуй ещё раз"}
 
 
 def regenerate(uid, sid):

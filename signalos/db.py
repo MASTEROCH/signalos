@@ -425,6 +425,19 @@ def update_draft(uid, sid, draft):
             c.execute("UPDATE signals SET draft=? WHERE id=? AND user_id=?", (draft, sid, uid))
 
 
+def recent_signals(uid, project, limit=40):
+    if _USE_PG:
+        conn = _pg(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT text, status FROM signals WHERE user_id=%s AND project=%s ORDER BY created DESC LIMIT %s",
+                    (uid, project, limit))
+        rows = cur.fetchall(); cur.close(); conn.close()
+        return [dict(r) for r in rows]
+    with _c() as c:
+        rows = c.execute("SELECT text, status FROM signals WHERE user_id=? AND project=? ORDER BY created DESC LIMIT ?",
+                         (uid, project, limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def export_rows(uid):
     if _USE_PG:
         conn = _pg()

@@ -257,6 +257,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, engine.set_source_config(uid, parts[2], self._body()))
         if len(parts) == 4 and parts[1] == "project" and parts[3] == "delete":
             return self._send(200, engine.delete_project(uid, parts[2]))
+        if len(parts) == 4 and parts[1] == "project" and parts[3] == "improve":
+            return self._send(200, engine.improve_project(uid, parts[2]))
         if len(parts) == 3 and parts[1] == "project":     # POST обновить проект
             pr = engine.update_project(uid, parts[2], self._body())
             return self._send(200, pr) if pr else self._send(404, {"error": "нет такого проекта"})
@@ -292,6 +294,11 @@ def auto_scan_loop():
             cfg = engine.get_config(uid); auto = cfg.get("automation", {})
             if auto.get("auto_scan", True) is False:
                 continue
+            # ИИ-авто-улучшение ключей раз в сутки (для проектов с включённым флагом)
+            for proj in cfg.get("projects", []):
+                if proj.get("auto_improve") and (now - proj.get("last_improve", 0) > 86400):
+                    try: engine.improve_project(uid, proj["id"])
+                    except Exception: pass
             iv = (auto.get("interval_min") or (PLANS.get(u["plan"], PLANS["free"])["interval"] // 60)) * 60
             if now - _last_scan.get(uid, 0) >= iv:
                 _last_scan[uid] = now

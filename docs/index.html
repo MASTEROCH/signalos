@@ -477,6 +477,12 @@
   .bigbal b{font-family:var(--display); font-size:40px; font-weight:800; color:var(--sig); letter-spacing:-.03em}
   .bigbal span{font-size:15px; color:var(--mut)}
 
+  /* ИИ-улучшение поиска */
+  .improve-box{border:1px solid var(--sig2); border-radius:14px; background:rgba(70,243,196,.05); padding:15px; margin:16px 0}
+  .improve-h{font-size:14.5px; font-weight:700; color:var(--sig); display:flex; align-items:center; gap:7px}
+  .improve-d{font-size:12.5px; color:var(--mut); line-height:1.5; margin:6px 0 12px}
+  .improve-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+
   /* перегенерация на карточке */
   .regen{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--mut); cursor:pointer; padding:6px 10px;
     border-radius:9px; border:1px solid var(--line2); background:var(--panel2); transition:.15s var(--ease)}
@@ -594,9 +600,9 @@
     .authcard{max-width:440px}
   }
 
-  /* мягче для тех, кто не любит анимации */
+  /* мягче для тех, кто не любит анимации — но радар сканирования всегда живой (это функциональная обратная связь) */
   @media (prefers-reduced-motion: reduce){
-    *{animation-duration:.01ms!important; transition-duration:.05ms!important}
+    *:not(.radar):not(.radarscan):not(.sweep):not(.blip):not(.core){animation-duration:.01ms!important; transition-duration:.05ms!important}
   }
 </style>
 </head>
@@ -1513,7 +1519,25 @@ function renderBuy(b){
       <div class="spendrow"><span class="si">${IC.refresh}</span><div class="sn">Перегенерация ответа<small>другой вариант под конкретное сообщение</small></div><span class="sc">${b.costs.regenerate}</span></div>
       <div class="spendrow"><span class="si">${IC.spark}</span><div class="sn">Умный подбор фраз<small>ИИ-подсказки при создании продукта</small></div><span class="sc">${b.costs.suggest}</span></div>
       <div class="spendrow"><span class="si">${IC.radar}</span><div class="sn">Автопоиск 24/7<small>радар ищет сам, без твоего участия</small></div><span class="sc sub">подписка Pro</span></div>
-    </div>`;
+    </div>
+
+    <div class="seth" style="font-size:18px;margin-top:22px">Подписка</div>
+    <div class="setsub" style="margin-bottom:10px">Автопоиск 24/7, Telegram, больше продуктов — на платных тарифах.</div>
+    ${Object.entries(b.plans).map(([id,pl])=>`
+      <div class="plancard ${id===b.plan?'cur':''}">
+        ${id===b.plan?'<span class="curbadge">текущий</span>':''}
+        <div class="pn">${pl.name}</div>
+        <div class="pp"><b>$${pl.price}</b>${pl.price?' /мес':''}</div>
+        <div class="pf">${pl.channels} · до ${pl.products} продукт(ов)${pl.auto?' · автопоиск 24/7':''}</div>
+        ${id!==b.plan ? `<button class="setbtn ${pl.price?'':'sec'}" onclick="buyUpgrade('${id}')">${pl.price?('Перейти на '+pl.name):'Вернуться на Free'}</button>` : ''}
+      </div>`).join('')}`;
+}
+async function buyUpgrade(plan){
+  try{
+    await api('/api/billing/upgrade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan})});
+    toast('Тариф изменён: <b>'+plan+'</b> (демо — реальная оплата позже)');
+    await refreshMe(); renderBuy(await api('/api/billing'));
+  }catch(e){ toast('Ошибка смены тарифа'); }
 }
 async function buyTokens(pack){
   try{
@@ -1591,6 +1615,15 @@ function pmRenderEdit(){
     <label class="wizlabel" style="margin-top:16px">Что пишут клиенты — ключевые фразы</label>
     <div class="chips">${(p.keywords||[]).map((k,i)=>`<span class="chip">${esc(k)} <x onclick="pmRmKw(${i})">✕</x></span>`).join('')||'<span style="color:var(--mut2);font-size:12.5px">пусто</span>'}</div>
     <div class="chipadd"><input id="pe-kw" value="${esc(PM.newKw)}" oninput="PM.newKw=this.value" onkeydown="if(event.key==='Enter')pmAddKw()" placeholder="добавить фразу"><button class="wbtn" style="padding:13px 18px" onclick="pmAddKw()">+</button></div>
+    <div class="improve-box">
+      <div class="improve-h">${ico('spark')} ИИ-улучшение поиска</div>
+      <div class="improve-d">ИИ перепишет фразы под то, что реально пишут клиенты (учтёт, что ты одобрял и пропускал) — выдача станет точнее, меньше «фейка».</div>
+      <div class="improve-row">
+        <button class="setbtn" onclick="pmImprove()">${ico('spark')} Улучшить сейчас</button>
+        <label class="switch" title="Авто-улучшение раз в сутки"><input type="checkbox" ${p.auto_improve?'checked':''} onchange="PM.proj.auto_improve=this.checked"><span class="track"><span class="knob"></span></span></label>
+        <span style="font-size:12.5px;color:var(--mut2)">авто раз в сутки</span>
+      </div>
+    </div>
     <label class="wizlabel">Стоп-слова — если встретятся, пропускаем</label>
     <div class="chips">${(p.negative_keywords||[]).map((k,i)=>`<span class="chip" style="border-color:var(--bad);background:rgba(255,107,107,.08)">${esc(k)} <x onclick="pmRmNeg(${i})">✕</x></span>`).join('')||'<span style="color:var(--mut2);font-size:12.5px">нет</span>'}</div>
     <div class="chipadd"><input id="pe-neg" value="${esc(PM.newNeg)}" oninput="PM.newNeg=this.value" onkeydown="if(event.key==='Enter')pmAddNeg()" placeholder="напр. вакансия"><button class="wbtn" style="padding:13px 18px" onclick="pmAddNeg()">+</button></div>
@@ -1603,6 +1636,17 @@ function pmRenderEdit(){
     </div>
     <div class="pm-del"><a onclick="pmAskDelete('${p.id}',\`${esc(p.name)}\`)">Удалить этот проект</a></div>`;
 }
+async function pmImprove(){
+  toast(IC.spark+' ИИ улучшает поиск…');
+  try{
+    const r=await api('/api/project/'+PM.proj.id+'/improve',{method:'POST'});
+    if(r.error){ if(r.need_tokens){ toast('Не хватает токенов — пополни'); openBuy(); } else toast(r.error); return; }
+    PM.proj.keywords=r.keywords;
+    if(r.charged) refreshMe();
+    pmRenderEdit();
+    toast('✓ '+(r.note||'Поиск улучшен')+(r.charged?(' · −'+r.charged+' токенов'):''));
+  }catch(e){ toast('Ошибка улучшения'); }
+}
 function pmAddKw(){ const v=(PM.newKw||'').trim(); if(v){ (PM.proj.keywords=PM.proj.keywords||[]).push(v); PM.newKw=''; } pmRenderEdit(); const e=document.getElementById('pe-kw'); if(e)e.focus(); }
 function pmRmKw(i){ PM.proj.keywords.splice(i,1); pmRenderEdit(); }
 function pmAddNeg(){ const v=(PM.newNeg||'').trim(); if(v){ (PM.proj.negative_keywords=PM.proj.negative_keywords||[]).push(v); PM.newNeg=''; } pmRenderEdit(); const e=document.getElementById('pe-neg'); if(e)e.focus(); }
@@ -1612,7 +1656,7 @@ async function pmSave(){
   const p=PM.proj;
   try{
     await api('/api/project/'+p.id,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:p.name,link:p.link,one_liner:p.one_liner,tone:p.tone,keywords:p.keywords,negative_keywords:p.negative_keywords,min_strength:p.min_strength})});
+      body:JSON.stringify({name:p.name,link:p.link,one_liner:p.one_liner,tone:p.tone,keywords:p.keywords,negative_keywords:p.negative_keywords,min_strength:p.min_strength,auto_improve:p.auto_improve})});
     toast('Проект сохранён');
     try{ PROJECTS=await api('/api/projects'); renderProjects(); }catch(e){}
     pmList();
