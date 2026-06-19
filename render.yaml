@@ -1,0 +1,16 @@
+# Render Blueprint: подключи репозиторий на render.com → Blueprint → Apply
+services:
+  - type: web
+    name: signalos
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: SIGNALOS_DB
+        value: /data/signalos.db
+      - key: SIGNALOS_PLATFORM_KEY   # (опц.) платформенный Anthropic-ключ для платных токенов
+        sync: false
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1

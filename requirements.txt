@@ -1,0 +1,2 @@
+# ядро SignalOS — чистый stdlib. Telethon нужен только для Telegram-канала.
+telethon>=1.36

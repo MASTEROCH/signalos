@@ -7,7 +7,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 from . import db, engine, setup, settings, auth
 
-PORT = int(os.environ.get("SIGNALOS_PORT", "8000"))
+PORT = int(os.environ.get("PORT") or os.environ.get("SIGNALOS_PORT", "8000"))   # хостинги задают PORT
 INTERVAL = int(os.environ.get("SIGNALOS_SCAN_INTERVAL", "900"))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _scanning = set()   # uids, по которым сейчас идёт скан
