@@ -1,0 +1,14 @@
+name: keepalive
+# Пингует Render каждые ~14 мин, чтобы Free-сервис не засыпал (холодный старт ~50с).
+on:
+  schedule:
+    - cron: '*/14 * * * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ping render
+        run: |
+          code=$(curl -s -m 60 -o /dev/null -w "%{http_code}" https://signalos-es52.onrender.com/ || echo "fail")
+          echo "ping → $code"
