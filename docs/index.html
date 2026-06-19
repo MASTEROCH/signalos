@@ -26,6 +26,14 @@
   html,body{height:100%}
   h1,h2,h3{font-family:var(--display); letter-spacing:-.02em}
   .ico{width:1.05em; height:1.05em; vertical-align:-0.16em; flex:0 0 auto; display:inline-block}
+  ::selection{background:rgba(70,243,196,.26); color:#fff}
+  ::-webkit-scrollbar{width:10px; height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--line2); border-radius:10px; border:3px solid transparent; background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--mut2); background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+  .copied-hint{margin-left:auto; font-size:13.5px; color:var(--sig); display:flex; align-items:center; gap:7px; font-weight:600}
+  .card.copied{border-color:var(--sig2); box-shadow:0 0 0 1px var(--sig2), var(--shadow), var(--spec)}
+  .card.copied .accent{background:var(--sig)}
   body{
     font-family:var(--sans); color:var(--ink); background:var(--bg);
     background-image:
@@ -35,9 +43,11 @@
   }
   .app{display:grid; grid-template-columns:248px 1fr; height:100vh}
 
-  /* SIDEBAR */
-  .side{border-right:1px solid var(--line); padding:20px 16px; display:flex; flex-direction:column; gap:16px;
-    background:linear-gradient(180deg, rgba(11,17,25,.6), rgba(7,11,16,.2)); overflow-y:auto}
+  /* SIDEBAR — Liquid Glass */
+  .side{border-right:1px solid var(--line); padding:22px 16px; display:flex; flex-direction:column; gap:18px;
+    background:linear-gradient(180deg, rgba(17,24,34,.55), rgba(9,13,19,.32));
+    backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); overflow-y:auto;
+    box-shadow:inset -1px 0 0 rgba(255,255,255,.03)}
   .brand{display:flex; align-items:center; gap:11px; padding:2px 4px}
   .radar{position:relative; width:38px; height:38px; border-radius:50%; flex:0 0 auto; overflow:hidden;
     border:1px solid var(--line2);
@@ -81,10 +91,12 @@
 
   /* MAIN */
   .main{display:flex; flex-direction:column; min-width:0; height:100vh}
-  .top{display:flex; align-items:center; gap:14px; padding:20px 28px; border-bottom:1px solid var(--line)}
+  .top{display:flex; align-items:center; gap:14px; padding:18px 28px; border-bottom:1px solid var(--line);
+    background:rgba(12,18,26,.5); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass);
+    box-shadow:inset 0 -1px 0 rgba(255,255,255,.03); z-index:5}
   .top h1{font-size:22px; font-weight:800; letter-spacing:-.02em}
   .top h1 small{color:var(--mut); font-weight:450; font-size:14.5px; margin-left:9px; font-family:var(--sans); letter-spacing:0}
-  .stats{margin-left:auto; display:flex; gap:10px}
+  .stats{display:flex; gap:10px}
   .stat{padding:9px 16px; border:1px solid var(--line); border-radius:14px; background:var(--panel2); text-align:right; min-width:86px;
     transition:.2s var(--ease); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); box-shadow:var(--spec)}
   .stat:hover{border-color:var(--line2); transform:translateY(-1px)}
@@ -174,7 +186,8 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
   .toast b{color:var(--sig)}
 
-  .scan{margin-left:6px; padding:11px 18px; font-size:14.5px}
+  .scan{margin-left:auto; padding:11px 18px; font-size:14.5px}
+  .iconbtn{display:grid; place-items:center}
   .scan.busy{opacity:.7; pointer-events:none}
   .scan.busy::after{content:""; width:11px;height:11px; border:2px solid #04130d; border-top-color:transparent;
     border-radius:50%; display:inline-block; animation:spin .7s linear infinite}
@@ -522,6 +535,7 @@ const DEMO_SIGNALS = [
 /* ============ СОСТОЯНИЕ ============ */
 let PROJECTS = [], SOURCES = [], QUEUE = [];
 let filter = 'all', sel = 0, done = 0, claudeOn = false, scanning = false, totalToday = 0;
+const copiedIds = new Set();
 
 const projColor = id => (PROJECTS.find(p=>p.id===id)||{}).color || '#46f3c4';
 const projName  = id => (PROJECTS.find(p=>p.id===id)||{}).name || id;
@@ -603,7 +617,7 @@ function renderCards(){
   }
 
   box.innerHTML = list.map((s,i)=>`
-    <div class="card ${i===sel?'sel':''}" data-temp="${s.temp}" data-id="${s.id}" style="animation-delay:${Math.min(i*0.05,0.5)}s" onclick="select(${i})">
+    <div class="card ${i===sel?'sel':''} ${copiedIds.has(s.id)?'copied':''}" data-temp="${s.temp}" data-id="${s.id}" style="animation-delay:${Math.min(i*0.05,0.5)}s" onclick="select(${i})">
       <div class="accent"></div>
       <div class="chead">
         <div class="src"><span class="ic">${srcIcon(s.source)}</span> <b>${s.source_label||s.chat||''}</b>
@@ -638,9 +652,15 @@ function renderCards(){
       </div>
 
       <div class="actions">
-        <button class="btn go" onclick="event.stopPropagation();approve(${s.id})">${ico('copy')} Скопировать ответ <span class="k">A</span></button>
-        ${s.url && s.url!=='#' ? `<a class="btn" href="${s.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ico('ext')} Открыть и ответить</a>` : ''}
-        <button class="btn skip" onclick="event.stopPropagation();skip(${s.id})">Не моё <span class="k">S</span></button>
+        ${copiedIds.has(s.id) ? `
+          ${s.url && s.url!=='#' ? `<a class="btn go" href="${s.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ico('ext')} Открыть и вставить</a>` : ''}
+          <button class="btn" onclick="event.stopPropagation();finishCard(${s.id})">${ico('check')} Готово <span class="k">A</span></button>
+          <span class="copied-hint">${ico('check')} Скопировано</span>
+        ` : `
+          <button class="btn go" onclick="event.stopPropagation();approve(${s.id})">${ico('copy')} Скопировать ответ <span class="k">A</span></button>
+          ${s.url && s.url!=='#' ? `<a class="btn" href="${s.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ico('ext')} Открыть</a>` : ''}
+          <button class="btn skip" onclick="event.stopPropagation();skip(${s.id})">Не моё <span class="k">S</span></button>
+        `}
       </div>
     </div>`).join('');
 
@@ -700,10 +720,17 @@ function approve(id){
   const ta = document.getElementById('ta-'+id);
   const txt = ta ? ta.value : '';
   if(navigator.clipboard) navigator.clipboard.writeText(txt).catch(()=>{});
-  if(LIVE) fetch('/api/signal/'+id+'/approve',{method:'POST'}).catch(()=>{});
-  done++; removeCard(id, ()=>toast('Ответ <b>скопирован</b> — открой оригинал, вставь и отправь со своего аккаунта'));
+  const s = QUEUE.find(x=>x.id===id); if(s) s.draft = txt;   // сохраняем твои правки
+  copiedIds.add(id);
+  renderCards();
+  toast('Ответ <b>скопирован</b> — открой тред, вставь и нажми «Готово»');
 }
-function skip(id){ if(LIVE) fetch('/api/signal/'+id+'/skip',{method:'POST'}).catch(()=>{}); removeCard(id, ()=>toast('Сигнал пропущен')); }
+function finishCard(id){
+  if(LIVE) fetch('/api/signal/'+id+'/approve',{method:'POST'}).catch(()=>{});
+  done++; copiedIds.delete(id);
+  removeCard(id, ()=>toast('Отлично — ответ отправлен ✓'));
+}
+function skip(id){ copiedIds.delete(id); if(LIVE) fetch('/api/signal/'+id+'/skip',{method:'POST'}).catch(()=>{}); removeCard(id, ()=>toast('Пропущено')); }
 function editDraft(id){ const ta=document.getElementById('ta-'+id); if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length);} }
 function autosize(el){ el.style.height='auto'; el.style.height=Math.max(84,el.scrollHeight)+'px'; }
 
@@ -747,7 +774,7 @@ document.addEventListener('keydown', e=>{
   const cur = list[sel];
   if(e.key==='j'||e.key==='ArrowDown'){ e.preventDefault(); sel=Math.min(list.length-1,sel+1); select(sel); }
   else if(e.key==='k'||e.key==='ArrowUp'){ e.preventDefault(); sel=Math.max(0,sel-1); select(sel); }
-  else if(e.key==='a'&&cur){ e.preventDefault(); approve(cur.id); }
+  else if(e.key==='a'&&cur){ e.preventDefault(); copiedIds.has(cur.id)?finishCard(cur.id):approve(cur.id); }
   else if(e.key==='s'&&cur){ e.preventDefault(); skip(cur.id); }
   else if(e.key==='e'&&cur){ e.preventDefault(); editDraft(cur.id); }
   else if(e.key==='r'){ e.preventDefault(); scanNow(); }
