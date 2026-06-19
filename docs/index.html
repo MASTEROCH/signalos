@@ -103,6 +103,18 @@
   @keyframes blip{0%,6%{opacity:0; transform:scale(.3)} 9%{opacity:1; transform:scale(1.35)}
     24%{opacity:.95; transform:scale(1)} 60%{opacity:0; transform:scale(.65)} 100%{opacity:0}}
   @media (max-width:600px){ .radarscan{width:164px; height:164px} }
+  /* схлопывание радара при появлении результатов */
+  .radarscan.collapse{animation:radarcollapse .42s cubic-bezier(.55,0,.85,.25) forwards}
+  @keyframes radarcollapse{60%{opacity:.5} to{transform:scale(.06) rotate(170deg); opacity:0; filter:blur(5px) brightness(2)}}
+  /* карточки-засветки вылетают и выравниваются в сетку */
+  .card.launch{animation:cardlaunch .74s cubic-bezier(.16,.84,.3,1.1) both; animation-delay:var(--ld,0s)}
+  @keyframes cardlaunch{
+    0%{opacity:0; transform:translate(var(--lx,0px), var(--ly,-150px)) scale(.26) rotate(var(--lr,0deg));
+       box-shadow:0 0 36px 9px rgba(70,243,196,.8); border-color:var(--sig)}
+    45%{opacity:1}
+    80%{box-shadow:0 0 22px 3px rgba(70,243,196,.4)}
+    100%{opacity:1; transform:none; box-shadow:var(--shadow), var(--spec)}
+  }
   .brand b{font-size:18px; letter-spacing:-.01em; font-family:var(--display); font-weight:800}
   .brand b span{color:var(--sig)}
   .brand small{display:block; color:var(--mut2); font-size:11px; letter-spacing:.4px; text-transform:uppercase; margin-top:2px; font-weight:500}
@@ -441,6 +453,37 @@
   .plancard .curbadge{position:absolute; top:16px; right:16px; font-size:11px; font-weight:700; color:#04130d;
     background:linear-gradient(180deg,var(--sig),var(--sig2)); padding:3px 10px; border-radius:20px}
 
+  /* ====== ТОКЕНЫ ====== */
+  .tokenbtn{display:inline-flex; align-items:center; gap:7px; padding:10px 14px; font-size:14px; font-weight:700}
+  .tokenbtn .hex{color:var(--sig); display:inline-flex; align-items:center}
+  .tokenbtn b{font-family:var(--mono); letter-spacing:-.02em}
+  .tokenbtn:hover{border-color:var(--sig2); color:var(--sig)}
+  .packs{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:6px 0 8px}
+  .pack{border:1px solid var(--line2); border-radius:16px; padding:18px 14px; text-align:center; background:var(--panel2); cursor:pointer;
+    transition:.18s var(--ease); position:relative; box-shadow:var(--spec)}
+  .pack:hover{transform:translateY(-2px); border-color:var(--sig2)}
+  .pack .pt{font-family:var(--display); font-size:24px; font-weight:800; color:var(--sig); letter-spacing:-.02em}
+  .pack .pl{font-size:12.5px; color:var(--mut2); margin:2px 0 10px}
+  .pack .pp{font-family:var(--display); font-size:19px; font-weight:700}
+  .pack .bonus{position:absolute; top:-8px; left:50%; transform:translateX(-50%); font-size:10.5px; font-weight:700; color:#04130d;
+    background:linear-gradient(180deg,var(--hot),#e0a800); padding:2px 9px; border-radius:20px; white-space:nowrap}
+  .spendlist{margin-top:4px}
+  .spendrow{display:flex; align-items:center; gap:11px; padding:11px 0; border-bottom:1px solid var(--line); font-size:14px}
+  .spendrow:last-child{border-bottom:0}
+  .spendrow .si{width:30px; height:30px; flex:0 0 auto; border-radius:9px; display:grid; place-items:center; color:var(--sig); background:rgba(70,243,196,.1); border:1px solid var(--sig2)}
+  .spendrow .sn{flex:1} .spendrow .sn small{display:block; color:var(--mut2); font-size:12px; margin-top:1px}
+  .spendrow .sc{font-family:var(--mono); font-weight:700; color:var(--sig); white-space:nowrap}
+  .spendrow .sc.sub{color:var(--hot); font-size:12.5px}
+  .bigbal{display:flex; align-items:baseline; gap:8px; margin-bottom:4px}
+  .bigbal b{font-family:var(--display); font-size:40px; font-weight:800; color:var(--sig); letter-spacing:-.03em}
+  .bigbal span{font-size:15px; color:var(--mut)}
+
+  /* перегенерация на карточке */
+  .regen{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--mut); cursor:pointer; padding:6px 10px;
+    border-radius:9px; border:1px solid var(--line2); background:var(--panel2); transition:.15s var(--ease)}
+  .regen:hover{color:var(--sig); border-color:var(--sig2)}
+  .regen.spin .ico{animation:spin .8s linear infinite}
+
   /* ====== МЕНЕДЖЕР ПРОЕКТОВ ====== */
   .sec-row{display:flex; align-items:center; justify-content:space-between}
   .manage{cursor:pointer; color:var(--mut2); width:22px; height:22px; display:grid; place-items:center; border-radius:6px; transition:.15s}
@@ -581,6 +624,7 @@
     <header class="top">
       <h1 id="feedtitle">Твои клиенты <small id="feedsub"></small></h1>
       <button class="btn go scan" id="scanbtn" onclick="scanNow()">Найти клиентов</button>
+      <button class="btn tokenbtn" id="tokbtn" onclick="openBuy()" title="Токены — клик чтобы пополнить"><span class="hex" id="tokhex"></span><b id="tokbal">—</b></button>
       <button class="btn iconbtn" id="setbtn" onclick="openSettings()" title="Настройки и ключи"></button>
       <div class="stats">
         <div class="stat"><b id="st-today">—</b><span>найдено за сутки</span></div>
@@ -622,6 +666,14 @@
 <!-- ====== ЛЕНДИНГ + ВХОД (SaaS gate) ====== -->
 <div class="gate" id="gate"></div>
 
+<!-- ====== ПОКУПКА ТОКЕНОВ ====== -->
+<div class="wiz" id="buy" onclick="if(event.target===this)closeBuy()">
+  <div class="wizbox set">
+    <div class="setclose" onclick="closeBuy()">✕</div>
+    <div id="buybody"></div>
+  </div>
+</div>
+
 <!-- ====== МЕНЕДЖЕР ПРОЕКТОВ ====== -->
 <div class="wiz" id="projmgr" onclick="if(event.target===this)closeProjects()">
   <div class="wizbox set">
@@ -657,6 +709,8 @@ const IC = {
   stack:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 12 17l9-5M3 16.5 12 21.5l9-5M3 7l9 5 9-5-9-5z"/></svg>',
   masto:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>',
   tag:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"/></svg>',
+  coin:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 21 7v10l-9 5-9-5V7z"/><circle cx="12" cy="12" r="3.2"/></svg>',
+  refresh:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>',
 };
 const ico = (name, cls='') => IC[name] ? IC[name].replace('class="ico"', `class="ico ${cls}"`) : '';
 
@@ -702,7 +756,7 @@ const DEMO_SIGNALS = [
 
 /* ============ СОСТОЯНИЕ ============ */
 let PROJECTS = [], SOURCES = [], QUEUE = [];
-let filter = 'all', tempFilter = 'all', sel = 0, done = 0, claudeOn = false, scanning = false, manualScan = false, totalToday = 0;
+let filter = 'all', tempFilter = 'all', sel = 0, done = 0, claudeOn = false, scanning = false, manualScan = false, justScanned = false, totalToday = 0;
 const copiedIds = new Set();
 
 const projColor = id => (PROJECTS.find(p=>p.id===id)||{}).color || '#46f3c4';
@@ -734,7 +788,7 @@ async function init(){
   }catch(e){ demoMode(); renderAll(); }
 }
 async function startApp(){
-  hideGate(); renderUser();
+  hideGate(); renderUser(); updateTokens();
   const status = await api('/api/status'); claudeOn = status.claude;
   if(!status.configured){ openWizard(); return; }
   await loadMain();
@@ -810,7 +864,7 @@ function renderCards(){
   }
 
   box.innerHTML = list.map((s,i)=>`
-    <div class="card ${i===sel?'sel':''} ${copiedIds.has(s.id)?'copied':''}" data-temp="${s.temp}" data-id="${s.id}" style="animation-delay:${Math.min(i*0.05,0.5)}s" onclick="select(${i})">
+    <div class="card ${i===sel?'sel':''} ${copiedIds.has(s.id)?'copied':''} ${justScanned?'launch':''}" data-temp="${s.temp}" data-id="${s.id}" style="${justScanned?`--lx:${((i*53)%140)-70}px;--ly:${-130-(i%3)*46}px;--lr:${((i*37)%18)-9}deg;--ld:${(i*0.06).toFixed(2)}s`:`animation-delay:${Math.min(i*0.05,0.5)}s`}" onclick="select(${i})">
       <div class="accent"></div>
       <div class="chead">
         <div class="src"><span class="ic">${srcIcon(s.source)}</span> <b>${s.source_label||s.chat||''}</b>
@@ -840,7 +894,10 @@ function renderCards(){
       </div>
 
       <div class="draft">
-        <div class="h"><span class="ai">${ico('spark')} Готовый ответ</span> · ${claudeOn?'написан Claude':'заготовка'} · правь как хочешь</div>
+        <div class="h" style="justify-content:space-between; text-transform:none; letter-spacing:0">
+          <span><span class="ai">${ico('spark')} Готовый ответ</span> · ${claudeOn?'Claude':'заготовка'} · правь как хочешь</span>
+          <span class="regen" onclick="event.stopPropagation();regenerate(${s.id}, this)">${ico('refresh')} Другой вариант</span>
+        </div>
         <textarea id="ta-${s.id}" oninput="autosize(this)">${(s.draft||'').replace(/</g,'&lt;')}</textarea>
       </div>
 
@@ -950,24 +1007,34 @@ async function scanNow(){
   if(scanning) return;
   scanning = true; manualScan = true;
   const btn = document.getElementById('scanbtn'); btn.classList.add('busy'); btn.textContent='';
-  renderCards();                       // сразу показать радар на весь фид
-  const minWait = new Promise(r=>setTimeout(r, 1500));   // дать насладиться анимацией
+  renderCards();                       // радар на весь фид
+  const minWait = new Promise(r=>setTimeout(r, 3000));   // дать насладиться сканированием (дольше)
+  let res = {};
   try{
-    const res = await fetch('/api/scan',{method:'POST'}).then(r=>r.json());
+    res = await fetch('/api/scan',{method:'POST'}).then(r=>r.json());
     await minWait;
     await reloadQueue();
-    toast(`Найдено <b>${res.signals||0}</b> новых клиентов из ${res.fetched||0} сообщений`);
   }catch(e){ await minWait; toast('Ошибка сканирования'); }
+  // радар схлопывается → карточки вылетают из засветок и встают в сетку
+  const rs = document.querySelector('.radarscan');
+  if(rs){ rs.classList.add('collapse'); await new Promise(r=>setTimeout(r, 360)); }
   scanning = false; manualScan = false;
   btn.classList.remove('busy'); btn.innerHTML = IC.search + ' Найти клиентов';
-  renderAll();
+  justScanned = true; renderAll();
+  if(res && res.signals!=null) toast(`Найдено <b>${res.signals||0}</b> новых клиентов`);
+  setTimeout(()=>{ justScanned = false; renderAll(); }, 1900);
 }
 async function pollScan(){
   for(let i=0;i<20 && scanning;i++){
     await new Promise(r=>setTimeout(r,2500));
     try{ const s = await api('/api/sources'); scanning = s.scanning; }catch(e){ break; }
   }
-  try{ await reloadQueue(); renderAll(); }catch(e){}
+  try{
+    await reloadQueue();
+    const rs=document.querySelector('.radarscan'); if(rs){ rs.classList.add('collapse'); await new Promise(r=>setTimeout(r,360)); }
+    justScanned = true; renderAll();
+    setTimeout(()=>{ justScanned = false; renderAll(); }, 1900);
+  }catch(e){}
 }
 
 let toastT;
@@ -980,11 +1047,13 @@ document.addEventListener('keydown', e=>{
   const wizOpen = document.getElementById('wiz').classList.contains('show');
   const setOpen = document.getElementById('settings').classList.contains('show');
   const pmOpen  = document.getElementById('projmgr').classList.contains('show');
+  const buyOpen = document.getElementById('buy').classList.contains('show');
   const gateOpen= document.getElementById('gate').classList.contains('show');
   if(e.key==='Escape' && setOpen){ closeSettings(); return; }
   if(e.key==='Escape' && pmOpen){ closeProjects(); return; }
+  if(e.key==='Escape' && buyOpen){ closeBuy(); return; }
   if(e.key==='Escape' && wizOpen){ closeWizard(); return; }
-  if(wizOpen || setOpen || pmOpen || gateOpen) return;
+  if(wizOpen || setOpen || pmOpen || buyOpen || gateOpen) return;
   if(e.target.tagName==='TEXTAREA' || e.target.tagName==='INPUT'){ if(e.key==='Escape') e.target.blur(); return; }
   const list = visible(); if(!list.length){ if(e.key==='r') scanNow(); return; }
   const cur = list[sel];
@@ -1147,6 +1216,7 @@ function closeSettings(){ document.getElementById('settings').classList.remove('
 function renderSettings(){
   const st = SET.status||{}, tg = st.telegram||{}, T = SET.tg;
   const conn = SET.tgState==='connected';
+  const isPro = !!(SET.billing && SET.billing.plan && SET.billing.plan!=='free');
   document.getElementById('setbody').innerHTML = `
     <div class="seth">Настройки</div>
     <div class="setsub">Вставь данные в поля — всё применится сразу, без перезапуска и терминала.</div>
@@ -1160,13 +1230,15 @@ function renderSettings(){
 
     ${SET.auto ? `<div class="setsec">
       <div class="row"><span class="ttl">${ico('radar')} Автопилот</span>
-        <span class="statuschip ${SET.auto.auto_scan!==false?'on':'off'}">${SET.auto.auto_scan!==false?'включён':'выключен'}</span></div>
-      <div class="desc">Радар сам сканирует по расписанию и копит клиентов в очередь — тебе остаётся одобрять. Хочешь — выключи и сканируй вручную.</div>
-      <div class="autorow"><div class="al">Авто-поиск<small>искать в фоне, без твоего участия</small></div>
-        <label class="switch"><input type="checkbox" ${SET.auto.auto_scan!==false?'checked':''} onchange="saveAuto('auto_scan', this.checked)"><span class="track"><span class="knob"></span></span></label></div>
-      <div class="autorow"><div class="al">Частота проверки<small>как часто прочёсывать источники</small></div>
-        <input type="number" min="5" max="1440" value="${SET.auto.interval_min||30}" style="width:96px;margin:0;text-align:center" onchange="saveAuto('interval_min', this.value)">
-        <span style="font-size:13.5px;color:var(--mut2)">мин</span></div>
+        ${isPro ? `<span class="statuschip ${SET.auto.auto_scan!==false?'on':'off'}">${SET.auto.auto_scan!==false?'включён':'выключен'}</span>` : `<span class="statuschip off">только в Pro</span>`}</div>
+      <div class="desc">Радар сам сканирует по расписанию и копит клиентов в очередь — тебе остаётся одобрять.${isPro?'':' Автопоиск 24/7 — на подписке Pro. На Free сканируй вручную кнопкой «Найти клиентов».'}</div>
+      ${isPro ? `
+        <div class="autorow"><div class="al">Авто-поиск<small>искать в фоне, без твоего участия</small></div>
+          <label class="switch"><input type="checkbox" ${SET.auto.auto_scan!==false?'checked':''} onchange="saveAuto('auto_scan', this.checked)"><span class="track"><span class="knob"></span></span></label></div>
+        <div class="autorow"><div class="al">Частота проверки<small>как часто прочёсывать источники</small></div>
+          <input type="number" min="5" max="1440" value="${SET.auto.interval_min||30}" style="width:96px;margin:0;text-align:center" onchange="saveAuto('interval_min', this.value)">
+          <span style="font-size:13.5px;color:var(--mut2)">мин</span></div>`
+      : `<button class="setbtn" onclick="upgrade('pro')">Перейти на Pro · $29/мес</button>`}
     </div>` : ''}
 
     <div class="setsec">
@@ -1390,6 +1462,70 @@ function renderUser(){
       <div class="uinfo" onclick="openSettings()" style="cursor:pointer"><b>${esc(ME.email)}</b><small>${ME.plan} план</small></div>
       <div class="lo" title="Выйти" onclick="logout()">${IC.ext}</div>
     </div>`;
+}
+
+/* ============ ТОКЕНЫ ============ */
+function updateTokens(){
+  const b=document.getElementById('tokbal'); if(b&&ME) b.textContent=(ME.credits!=null?ME.credits:'—');
+  const h=document.getElementById('tokhex'); if(h&&!h.innerHTML) h.innerHTML=IC.coin;
+}
+async function refreshMe(){ try{ const m=await api('/api/auth/me'); ME=m.user; updateTokens(); renderUser(); }catch(e){} }
+
+async function openBuy(){
+  if(!LIVE){ toast('Запусти <b>./run.sh</b>'); return; }
+  document.getElementById('buy').classList.add('show');
+  document.getElementById('buybody').innerHTML='<div class="wizspin" style="margin:60px auto"></div>';
+  try{ renderBuy(await api('/api/billing')); }catch(e){ document.getElementById('buybody').innerHTML='<div class="seth">Токены</div><p style="color:var(--mut)">Не удалось загрузить.</p>'; }
+}
+function closeBuy(){ document.getElementById('buy').classList.remove('show'); }
+
+function renderBuy(b){
+  const ai = b.byo ? 'У тебя свой ключ — ИИ безлимит, токены не тратятся.'
+    : (b.platform_ai ? 'Токены тратятся на ИИ-действия через платформу.'
+    : 'Платформенный ИИ пока выключен. Добавь свой Anthropic-ключ в ⚙ для умных ответов — тогда токены не нужны.');
+  document.getElementById('buybody').innerHTML=`
+    <div class="seth">Токены</div>
+    <div class="bigbal"><span class="hex" style="color:var(--sig)">${IC.coin}</span><b>${b.credits}</b><span>на балансе</span></div>
+    <div class="setsub">${ai}</div>
+    <div class="packs">
+      ${Object.entries(b.packs).map(([id,p])=>`
+        <div class="pack" onclick="buyTokens('${id}')">
+          ${p.bonus?`<span class="bonus">${p.bonus}</span>`:''}
+          <div class="pt">${p.tokens.toLocaleString('ru')}</div>
+          <div class="pl">${p.label||'токенов'}</div>
+          <div class="pp">$${p.price}</div>
+        </div>`).join('')}
+    </div>
+    <div class="ddesc">Оплата подключится позже (Cryptomus / карты). Сейчас пополнение — демо, без денег.</div>
+    <div class="seth" style="font-size:18px;margin-top:20px">На что тратятся токены</div>
+    <div class="spendlist">
+      <div class="spendrow"><span class="si">${IC.search}</span><div class="sn">Поиск клиентов<small>ИИ-ответ на каждого найденного человека</small></div><span class="sc">${b.costs.reply} / клиент</span></div>
+      <div class="spendrow"><span class="si">${IC.refresh}</span><div class="sn">Перегенерация ответа<small>другой вариант под конкретное сообщение</small></div><span class="sc">${b.costs.regenerate}</span></div>
+      <div class="spendrow"><span class="si">${IC.spark}</span><div class="sn">Умный подбор фраз<small>ИИ-подсказки при создании продукта</small></div><span class="sc">${b.costs.suggest}</span></div>
+      <div class="spendrow"><span class="si">${IC.radar}</span><div class="sn">Автопоиск 24/7<small>радар ищет сам, без твоего участия</small></div><span class="sc sub">подписка Pro</span></div>
+    </div>`;
+}
+async function buyTokens(pack){
+  try{
+    const r=await api('/api/tokens/buy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pack})});
+    toast('Начислено <b>+'+r.added+'</b> токенов (демо)');
+    await refreshMe(); renderBuy(await api('/api/billing'));
+  }catch(e){ toast('Ошибка пополнения'); }
+}
+
+async function regenerate(id, el){
+  if(el) el.classList.add('spin');
+  try{
+    const r=await api('/api/regenerate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({signal_id:id})});
+    if(r.error){ if(r.need_tokens){ toast('Не хватает токенов — пополни'); openBuy(); } else toast(r.error); }
+    else{
+      const s=QUEUE.find(x=>x.id===id); if(s) s.draft=r.draft;
+      const ta=document.getElementById('ta-'+id); if(ta){ ta.value=r.draft; autosize(ta); }
+      if(r.charged){ await refreshMe(); }
+      toast(r.charged?('Новый вариант · −'+r.charged+' токена'):'Новый вариант готов');
+    }
+  }catch(e){ toast('Ошибка перегенерации'); }
+  if(el) el.classList.remove('spin');
 }
 
 /* ============ МЕНЕДЖЕР ПРОЕКТОВ (CRUD) ============ */

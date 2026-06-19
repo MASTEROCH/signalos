@@ -150,6 +150,29 @@ def delete_project_signals(uid, pid):
         c.execute("DELETE FROM signals WHERE user_id=? AND project=?", (uid, pid))
 
 
+def charge(uid, n):
+    """Списать n токенов. True если хватило и списали, иначе False (баланс не трогаем)."""
+    with _c() as c:
+        r = c.execute("SELECT credits FROM users WHERE id=?", (uid,)).fetchone()
+        if not r or r["credits"] < n:
+            return False
+        c.execute("UPDATE users SET credits=credits-? WHERE id=?", (n, uid))
+        return True
+
+
+def get_signal(uid, sid):
+    with _c() as c:
+        r = c.execute("SELECT * FROM signals WHERE id=? AND user_id=?", (sid, uid)).fetchone()
+    if not r:
+        return None
+    d = dict(r); d["hl"] = json.loads(d["hl"] or "[]"); return d
+
+
+def update_draft(uid, sid, draft):
+    with _c() as c:
+        c.execute("UPDATE signals SET draft=? WHERE id=? AND user_id=?", (draft, sid, uid))
+
+
 def all_user_ids():
     with _c() as c:
         return [r["user_id"] for r in c.execute("SELECT user_id FROM configs").fetchall()]

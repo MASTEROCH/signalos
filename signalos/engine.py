@@ -2,7 +2,14 @@
 engine.py — оркестратор сканирования, мультитенант.
 Каждый пользователь — свой конфиг (проекты + источники + ключ) в БД, свои сигналы.
 """
+import os
 from . import db, classifier, sources
+
+# Платформенный ИИ-ключ (для пользователей без своего ключа — за токены)
+PLATFORM_KEY = os.environ.get("SIGNALOS_PLATFORM_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
+COST_REPLY = 1       # токенов за ИИ-ответ на найденного клиента
+COST_REGEN = 2       # за перегенерацию ответа
+COST_SUGGEST = 5     # за умный подбор фраз в мастере
 
 DEFAULT_SOURCES = [
     {"id": "hackernews", "enabled": True, "label": "HackerNews", "max_keywords": 6},
@@ -127,13 +134,26 @@ def _source_cfg(uid, src, cfg):
     return s
 
 
+def _ai_mode(uid, cfg):
+    """Возвращает (key, platform): свой ключ → безлимит; иначе платформенный за токены; иначе free."""
+    byo = cfg.get("anthropic_key", "")
+    if byo:
+        return byo, False
+    u = db.get_user(uid)
+    if PLATFORM_KEY and u and u["credits"] > 0:
+        return PLATFORM_KEY, True
+    return "", False
+
+
 def scan_user(uid):
     cfg = get_config(uid)
     projects = cfg.get("projects", [])
-    summary = {"fetched": 0, "signals": 0, "by_source": {}}
+    summary = {"fetched": 0, "signals": 0, "by_source": {}, "spent": 0}
     if not projects:
         return summary
-    key = cfg.get("anthropic_key", "")
+    key, platform = _ai_mode(uid, cfg)
+    u = db.get_user(uid)
+    credits_left = u["credits"] if (u and platform) else 0
     kws = all_keywords(projects)
     db.init()
     for src in cfg.get("sources", []):
@@ -148,9 +168,31 @@ def scan_user(uid):
                 continue
             if not prefilter(post["text"], projects):
                 continue
+            if platform and credits_left < COST_REPLY:    # токены кончились → free-режим для остатка
+                key, platform = "", False
             sig = classifier.process(post, projects, key)
             if sig and db.add(uid, post, sig):
                 found += 1
+                if platform and db.charge(uid, COST_REPLY):
+                    credits_left -= COST_REPLY
+                    summary["spent"] += COST_REPLY
         summary["by_source"][sid] = found
         summary["signals"] += found
     return summary
+
+
+def regenerate(uid, sid):
+    sig = db.get_signal(uid, sid)
+    if not sig:
+        return {"error": "нет такого сигнала"}
+    cfg = get_config(uid)
+    proj = next((p for p in cfg.get("projects", []) if p["id"] == sig["project"]), None)
+    if not proj:
+        return {"error": "нет проекта"}
+    key, platform = _ai_mode(uid, cfg)
+    if platform and not db.charge(uid, COST_REGEN):
+        return {"error": "Недостаточно токенов", "need_tokens": True}
+    post = {"text": sig["text"], "lang": sig["lang"], "source_label": sig["source_label"]}
+    draft = classifier.make_draft(post, proj, key, sig.get("why", ""), variant=True)
+    db.update_draft(uid, sid, draft)
+    return {"ok": True, "draft": draft, "charged": (COST_REGEN if platform else 0)}

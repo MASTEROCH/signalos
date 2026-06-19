@@ -13,10 +13,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _scanning = set()   # uids, по которым сейчас идёт скан
 
 PLANS = {
-    "free":   {"name": "Free",   "price": 0,   "products": 1,  "channels": "Публичные каналы (HN, Reddit, Bluesky, Lemmy, RSS)", "interval": 1800},
-    "pro":    {"name": "Pro",    "price": 29,  "products": 5,  "channels": "Всё из Free + Telegram + авто-скан каждые 5 мин + уведомления", "interval": 300},
-    "agency": {"name": "Agency", "price": 99,  "products": 50, "channels": "Всё из Pro + несколько воркспейсов + команда + приоритет", "interval": 120},
+    "free":   {"name": "Free",   "price": 0,   "products": 1,  "auto": False, "channels": "10 публичных каналов, ручной поиск", "interval": 1800},
+    "pro":    {"name": "Pro",    "price": 29,  "products": 5,  "auto": True,  "channels": "Всё из Free + автопоиск 24/7 + Telegram + уведомления", "interval": 300},
+    "agency": {"name": "Agency", "price": 99,  "products": 50, "auto": True,  "channels": "Всё из Pro + воркспейсы + команда + приоритет", "interval": 120},
 }
+# Пакеты токенов (оплата пока заглушка)
+PACKS = {
+    "s": {"tokens": 500,   "price": 5,  "label": "Старт"},
+    "m": {"tokens": 2500,  "price": 20, "label": "Рост", "bonus": "+25%"},
+    "l": {"tokens": 12000, "price": 80, "label": "Студия", "bonus": "+50%"},
+}
+COSTS = {"reply": engine.COST_REPLY, "regenerate": engine.COST_REGEN, "suggest": engine.COST_SUGGEST}
 
 
 def scan(uid):
@@ -137,7 +144,9 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/settings":
             return self._send(200, settings.status(uid))
         if p == "/api/billing":
-            return self._send(200, {"plan": u["plan"], "credits": u["credits"], "plans": PLANS})
+            return self._send(200, {"plan": u["plan"], "credits": u["credits"], "plans": PLANS,
+                                    "packs": PACKS, "costs": COSTS, "platform_ai": bool(engine.PLATFORM_KEY),
+                                    "byo": bool(engine.get_config(uid).get("anthropic_key"))})
         if p == "/api/queue":
             proj = "all"
             if "?" in self.path:
@@ -184,7 +193,23 @@ class H(BaseHTTPRequestHandler):
             b = self._body(); desc = (b.get("description") or "").strip()
             if len(desc) < 8:
                 return self._send(400, {"error": "опиши продукт чуть подробнее"})
-            return self._send(200, setup.suggest(desc, engine.get_config(uid).get("anthropic_key")))
+            cfg = engine.get_config(uid); key, platform = engine._ai_mode(uid, cfg)
+            if platform and not db.charge(uid, engine.COST_SUGGEST):
+                key = ""    # не хватило токенов → эвристика бесплатно
+            return self._send(200, setup.suggest(desc, key))
+        if p == "/api/regenerate":
+            sid = self._body().get("signal_id")
+            try:
+                return self._send(200, engine.regenerate(uid, int(sid)))
+            except Exception:
+                return self._send(400, {"error": "плохой запрос"})
+        if p == "/api/tokens/buy":
+            pack = self._body().get("pack")
+            if pack not in PACKS:
+                return self._send(400, {"error": "неизвестный пакет"})
+            db.add_credits(uid, PACKS[pack]["tokens"])
+            return self._send(200, {"ok": True, "credits": db.get_user(uid)["credits"],
+                                    "added": PACKS[pack]["tokens"], "demo": True})
         if p == "/api/scan":
             return self._send(200, scan(uid))
         if p == "/api/settings/claude":
@@ -246,10 +271,12 @@ def auto_scan_loop():
         for uid in db.all_user_ids():
             if uid in _scanning or not is_configured(uid):
                 continue
+            u = db.get_user(uid)
+            if not PLANS.get(u["plan"], PLANS["free"])["auto"]:   # автопоиск — только на подписке
+                continue
             cfg = engine.get_config(uid); auto = cfg.get("automation", {})
             if auto.get("auto_scan", True) is False:
                 continue
-            u = db.get_user(uid)
             iv = (auto.get("interval_min") or (PLANS.get(u["plan"], PLANS["free"])["interval"] // 60)) * 60
             if now - _last_scan.get(uid, 0) >= iv:
                 _last_scan[uid] = now
