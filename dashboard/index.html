@@ -65,27 +65,44 @@
   @keyframes sweep{to{transform:rotate(360deg)}}
   @keyframes ping{0%{transform:scale(.15); opacity:.85} 60%{opacity:.12} 100%{transform:scale(1); opacity:0}}
 
-  /* ====== БОЛЬШОЙ РАДАР СКАНИРОВАНИЯ (военный, с блипами) ====== */
-  .radarscan{position:relative; width:150px; height:150px; margin:0 auto 24px; border-radius:50%; overflow:hidden;
-    border:1px solid rgba(70,243,196,.35);
+  /* ====== АРМЕЙСКИЙ РАДАР СКАНИРОВАНИЯ (фосфор + послесвечение луча) ====== */
+  .radarscan{--rg:#38ff8e; position:relative; width:200px; height:200px; margin:6px auto 28px; border-radius:50%; overflow:hidden;
+    border:2px solid rgba(56,255,142,.42); isolation:isolate;
     background:
-      repeating-radial-gradient(circle at 50% 50%, rgba(70,243,196,.10) 0 1px, transparent 1px 25px),
-      linear-gradient(rgba(70,243,196,.16), rgba(70,243,196,.16)) 50%/1px 100% no-repeat,
-      linear-gradient(rgba(70,243,196,.16), rgba(70,243,196,.16)) 50%/100% 1px no-repeat,
-      radial-gradient(circle, rgba(70,243,196,.08), rgba(7,11,16,.4) 75%);
-    box-shadow:0 0 40px -8px rgba(70,243,196,.5), inset 0 0 30px -10px rgba(70,243,196,.4)}
-  .radarscan .sweep{position:absolute; inset:0; border-radius:50%; transform-origin:center;
-    background:conic-gradient(from 0deg, rgba(70,243,196,.55) 0deg, rgba(70,243,196,.12) 22deg, transparent 60deg, transparent 360deg);
-    animation:sweep 2.4s linear infinite}
-  .radarscan .sweep::after{content:""; position:absolute; left:50%; top:0; width:1.5px; height:50%; transform-origin:bottom;
-    background:linear-gradient(var(--sig), transparent); box-shadow:0 0 8px var(--sig)}
-  .radarscan .core{position:absolute; left:50%; top:50%; width:8px; height:8px; margin:-4px; border-radius:50%;
-    background:var(--sig); box-shadow:0 0 12px var(--sig)}
-  .radarscan .blip{position:absolute; left:var(--x); top:var(--y); width:7px; height:7px; margin:-3.5px; border-radius:50%;
-    background:var(--sig); box-shadow:0 0 10px 2px var(--sig); opacity:0;
-    animation:blip 2.4s linear infinite; animation-delay:var(--d)}
-  @keyframes blip{0%,8%{opacity:0; transform:scale(.4)} 10%{opacity:1; transform:scale(1.25)}
-    35%{opacity:.85; transform:scale(1)} 70%{opacity:0; transform:scale(.7)} 100%{opacity:0}}
+      repeating-radial-gradient(circle at 50% 50%, rgba(56,255,142,.10) 0 1px, transparent 1px 16px),
+      radial-gradient(circle, rgba(56,255,142,.07), rgba(2,12,7,.55) 70%, #020c07 100%);
+    box-shadow:0 0 55px -6px rgba(56,255,142,.55), inset 0 0 46px -6px rgba(56,255,142,.5), inset 0 0 0 1px rgba(56,255,142,.16)}
+  /* крестовина + диагонали */
+  .radarscan::before{content:""; position:absolute; inset:0; pointer-events:none;
+    background:
+      linear-gradient(rgba(56,255,142,.26),rgba(56,255,142,.26)) 50%/1.5px 100% no-repeat,
+      linear-gradient(rgba(56,255,142,.26),rgba(56,255,142,.26)) 50%/100% 1.5px no-repeat,
+      linear-gradient(45deg, transparent calc(50% - .6px), rgba(56,255,142,.12) calc(50% - .6px) calc(50% + .6px), transparent calc(50% + .6px)),
+      linear-gradient(-45deg, transparent calc(50% - .6px), rgba(56,255,142,.12) calc(50% - .6px) calc(50% + .6px), transparent calc(50% + .6px))}
+  /* концентрические кольца */
+  .radarscan .rings{position:absolute; inset:0; border-radius:50%; pointer-events:none;
+    background:
+      radial-gradient(circle, transparent 0 21%, rgba(56,255,142,.32) 21% 21.8%, transparent 21.8%),
+      radial-gradient(circle, transparent 0 40%, rgba(56,255,142,.26) 40% 40.7%, transparent 40.7%),
+      radial-gradient(circle, transparent 0 60%, rgba(56,255,142,.22) 60% 60.7%, transparent 60.7%),
+      radial-gradient(circle, transparent 0 80%, rgba(56,255,142,.18) 80% 80.7%, transparent 80.7%)}
+  /* луч с затухающим хвостом-послесвечением */
+  .radarscan .sweep{position:absolute; inset:0; border-radius:50%; transform-origin:center; mix-blend-mode:screen;
+    background:conic-gradient(from 0deg,
+      rgba(56,255,142,.62) 0deg, rgba(56,255,142,0) 1deg,
+      transparent 238deg, rgba(56,255,142,.04) 250deg, rgba(56,255,142,.16) 320deg,
+      rgba(56,255,142,.40) 352deg, rgba(56,255,142,.62) 360deg);
+    animation:sweep 3s linear infinite}
+  .radarscan .sweep::after{content:""; position:absolute; left:50%; top:0; width:2px; height:50%; transform-origin:bottom;
+    background:linear-gradient(var(--rg), rgba(56,255,142,0)); box-shadow:0 0 12px 1px var(--rg)}
+  .radarscan .core{position:absolute; left:50%; top:50%; width:9px; height:9px; margin:-4.5px; border-radius:50%;
+    background:var(--rg); box-shadow:0 0 16px 3px var(--rg)}
+  .radarscan .blip{position:absolute; left:var(--x); top:var(--y); width:8px; height:8px; margin:-4px; border-radius:50%;
+    background:var(--rg); box-shadow:0 0 12px 3px var(--rg); opacity:0;
+    animation:blip 3s linear infinite; animation-delay:var(--d)}
+  @keyframes blip{0%,6%{opacity:0; transform:scale(.3)} 9%{opacity:1; transform:scale(1.35)}
+    24%{opacity:.95; transform:scale(1)} 60%{opacity:0; transform:scale(.65)} 100%{opacity:0}}
+  @media (max-width:600px){ .radarscan{width:164px; height:164px} }
   .brand b{font-size:18px; letter-spacing:-.01em; font-family:var(--display); font-weight:800}
   .brand b span{color:var(--sig)}
   .brand small{display:block; color:var(--mut2); font-size:11px; letter-spacing:.4px; text-transform:uppercase; margin-top:2px; font-weight:500}
@@ -685,7 +702,7 @@ const DEMO_SIGNALS = [
 
 /* ============ СОСТОЯНИЕ ============ */
 let PROJECTS = [], SOURCES = [], QUEUE = [];
-let filter = 'all', tempFilter = 'all', sel = 0, done = 0, claudeOn = false, scanning = false, totalToday = 0;
+let filter = 'all', tempFilter = 'all', sel = 0, done = 0, claudeOn = false, scanning = false, manualScan = false, totalToday = 0;
 const copiedIds = new Set();
 
 const projColor = id => (PROJECTS.find(p=>p.id===id)||{}).color || '#46f3c4';
@@ -778,6 +795,12 @@ function highlight(text, words){
 function renderCards(){
   renderQbar();
   const box = document.getElementById('cards');
+  if(scanning && manualScan){   // ручной поиск — показываем большой радар на весь фид
+    document.getElementById('qbar').innerHTML='';
+    box.innerHTML = `<div class="empty">${radarScanHTML()}<h3>Сканирую эфир…</h3>
+      <div style="max-width:460px;margin:0 auto">Радар прочёсывает 10 каналов в поисках твоих клиентов. Зелёные засветки — найденные сигналы.</div></div>`;
+    updateStats(); return;
+  }
   const list = visible();
   if(sel>=list.length) sel = Math.max(0, list.length-1);
 
@@ -839,8 +862,10 @@ function renderCards(){
 }
 
 function radarScanHTML(){
-  const blips = [[70,32,.15],[38,27,.55],[27,60,.95],[63,69,1.35],[79,50,1.75],[47,45,2.05],[55,22,1.1]];
+  // [x%, y%, delay] — задержка ≈ моменту, когда луч (3s оборот) проходит мимо блипа
+  const blips = [[56,33,.17],[69,27,.33],[83,56,.83],[64,74,1.25],[36,81,1.71],[21,58,2.13],[28,38,2.5]];
   return `<div class="radarscan">
+    <div class="rings"></div>
     <div class="sweep"></div>
     ${blips.map(b=>`<span class="blip" style="--x:${b[0]}%;--y:${b[1]}%;--d:${b[2]}s"></span>`).join('')}
     <div class="core"></div>
@@ -923,15 +948,17 @@ function autosize(el){ el.style.height='auto'; el.style.height=Math.max(84,el.sc
 async function scanNow(){
   if(!LIVE){ toast('Демо-режим. Запусти <b>./run.sh</b> — и радар начнёт ловить реальных людей'); return; }
   if(scanning) return;
-  scanning = true;
+  scanning = true; manualScan = true;
   const btn = document.getElementById('scanbtn'); btn.classList.add('busy'); btn.textContent='';
-  toast('Сканирую источники…');
+  renderCards();                       // сразу показать радар на весь фид
+  const minWait = new Promise(r=>setTimeout(r, 1500));   // дать насладиться анимацией
   try{
     const res = await fetch('/api/scan',{method:'POST'}).then(r=>r.json());
+    await minWait;
     await reloadQueue();
     toast(`Найдено <b>${res.signals||0}</b> новых клиентов из ${res.fetched||0} сообщений`);
-  }catch(e){ toast('Ошибка сканирования'); }
-  scanning = false;
+  }catch(e){ await minWait; toast('Ошибка сканирования'); }
+  scanning = false; manualScan = false;
   btn.classList.remove('busy'); btn.innerHTML = IC.search + ' Найти клиентов';
   renderAll();
 }
