@@ -1,12 +1,8 @@
 """
-engine.py — оркестратор сканирования.
-Для каждого включённого источника: собрать посты → префильтр по ключевикам (экономим Claude)
-→ классификатор → дедуп → сохранить сигнал. Возвращает сводку.
+engine.py — оркестратор сканирования, мультитенант.
+Каждый пользователь — свой конфиг (проекты + источники + ключ) в БД, свои сигналы.
 """
-import json, os
 from . import db, classifier, sources
-
-CONFIG = os.environ.get("SIGNALOS_CONFIG", "config/config.json")
 
 DEFAULT_SOURCES = [
     {"id": "hackernews", "enabled": True, "label": "HackerNews", "max_keywords": 6},
@@ -15,37 +11,33 @@ DEFAULT_SOURCES = [
     {"id": "bluesky", "enabled": True, "label": "Bluesky", "max_keywords": 6},
     {"id": "lemmy", "enabled": True, "label": "Lemmy", "max_keywords": 5, "instance": "lemmy.world"},
     {"id": "rss", "enabled": True, "label": "Google Alerts / RSS", "feeds": []},
-    {"id": "telegram", "enabled": False, "label": "Telegram", "chats": [], "per_chat": 40,
-     "needs": "Бесплатный вход: my.telegram.org → API_ID/HASH → python3 -m signalos.tg_login"},
+    {"id": "telegram", "enabled": False, "label": "Telegram", "chats": [], "per_chat": 40},
 ]
 
 
-def load_config():
-    if os.path.exists(CONFIG):
-        return json.load(open(CONFIG, encoding="utf-8"))
-    # ещё не настроен — радар ждёт онбординга
-    return {"configured": False, "sources": [dict(s) for s in DEFAULT_SOURCES], "projects": []}
+def default_config():
+    return {"configured": False, "sources": [dict(s) for s in DEFAULT_SOURCES],
+            "projects": [], "anthropic_key": "", "tg": {}}
 
 
-def save_config(cfg):
-    os.makedirs(os.path.dirname(CONFIG) or ".", exist_ok=True)
-    json.dump(cfg, open(CONFIG, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    return cfg
+def get_config(uid):
+    return db.get_config(uid) or default_config()
+
+
+def save_config(uid, cfg):
+    db.save_config(uid, cfg)
 
 
 def all_keywords(projects):
-    kws = []
-    for p in projects:
-        kws += p.get("keywords", [])
     seen, out = set(), []
-    for k in kws:
-        if k.lower() not in seen:
-            seen.add(k.lower()); out.append(k)
+    for p in projects:
+        for k in p.get("keywords", []):
+            if k.lower() not in seen:
+                seen.add(k.lower()); out.append(k)
     return out
 
 
 def prefilter(text, projects):
-    """Пропускаем пост к классификатору, если есть совпадение по значимым словам-токенам ключей."""
     low = text.lower()
     if len(low) < 20:
         return False
@@ -57,33 +49,40 @@ def prefilter(text, projects):
     return False
 
 
-def scan():
-    cfg = load_config()
-    projects = cfg["projects"]
+def _source_cfg(uid, src, cfg):
+    """Готовит конфиг источника. Для telegram подставляет креды/сессию пользователя."""
+    s = dict(src)
+    if src["id"] == "telegram":
+        tg = cfg.get("tg", {})
+        s["api_id"] = tg.get("api_id"); s["api_hash"] = tg.get("api_hash")
+        s["session"] = f"sessions/u{uid}"; s["chats"] = tg.get("chats", src.get("chats", []))
+    return s
+
+
+def scan_user(uid):
+    cfg = get_config(uid)
+    projects = cfg.get("projects", [])
+    summary = {"fetched": 0, "signals": 0, "by_source": {}}
+    if not projects:
+        return summary
+    key = cfg.get("anthropic_key", "")
     kws = all_keywords(projects)
     db.init()
-    summary = {"fetched": 0, "signals": 0, "by_source": {}}
-
     for src in cfg.get("sources", []):
         if not src.get("enabled"):
             continue
         sid = src["id"]
-        posts = sources.collect(sid, kws, src)
+        posts = sources.collect(sid, kws, _source_cfg(uid, src, cfg))
         summary["fetched"] += len(posts)
         found = 0
         for post in posts:
-            if db.exists(post["external_id"]):
+            if db.exists(uid, post["external_id"]):
                 continue
             if not prefilter(post["text"], projects):
                 continue
-            sig = classifier.process(post, projects)
-            if sig and db.add(post, sig):
+            sig = classifier.process(post, projects, key)
+            if sig and db.add(uid, post, sig):
                 found += 1
         summary["by_source"][sid] = found
         summary["signals"] += found
-        print(f"  ✓ {sid}: {len(posts)} постов → {found} новых сигналов")
     return summary
-
-
-if __name__ == "__main__":
-    print("SignalOS scan…"); print(scan())

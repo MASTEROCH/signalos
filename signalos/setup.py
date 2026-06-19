@@ -22,11 +22,12 @@ STOP = set("""the and for you your are with that this have from will what when h
 
 
 # ---------- ПОДСКАЗКИ ДЛЯ МАСТЕРА ----------
-def suggest(description):
-    return _claude_suggest(description) if classifier.current_key() else _heuristic_suggest(description)
+def suggest(description, key=None):
+    key = key or classifier.current_key()
+    return _claude_suggest(description, key) if key else _heuristic_suggest(description)
 
 
-def _claude_suggest(description):
+def _claude_suggest(description, key):
     sys = (
         "Ты — маркетолог. Дано описание продукта от основателя. Помоги настроить поиск клиентов "
         "в публичных обсуждениях. Верни СТРОГО JSON:\n{\n"
@@ -39,7 +40,7 @@ def _claude_suggest(description):
         '  "alerts": ["3 коротких фразы для бесплатного Google Alerts"]\n}'
     )
     j = classifier._json(classifier._anthropic(classifier.DRAFT_MODEL, sys,
-                         f"Описание продукта: {description}", 900)) or {}
+                         f"Описание продукта: {description}", 900, key)) or {}
     if not j.get("phrases"):
         return _heuristic_suggest(description)
     return {"name": j.get("name", _short_name(description)),

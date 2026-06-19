@@ -51,9 +51,10 @@ def _wordin(token, low):
 
 
 # ---------- ПУБЛИЧНЫЙ API ----------
-def process(post, projects):
-    """Возвращает запись сигнала или None (шум)."""
-    return _claude(post, projects) if current_key() else _free(post, projects)
+def process(post, projects, key=None):
+    """Возвращает запись сигнала или None (шум). key — Anthropic-ключ пользователя (SaaS)."""
+    key = key or current_key()
+    return _claude(post, projects, key) if key else _free(post, projects)
 
 
 # ---------- БЕСПЛАТНЫЙ РЕЖИМ ----------
@@ -152,7 +153,7 @@ def _template(post, project, hits=None):
 
 
 # ---------- РЕЖИМ CLAUDE ----------
-def _claude(post, projects):
+def _claude(post, projects, key):
     brief = "\n".join(f"- id={p['id']} | {p['name']}: {p['one_liner']} | аудитория: {p['audience']}"
                       for p in projects)
     sys = ("Ты — radar лидов. Дано публичное сообщение. Реши: выражает ли автор боль/намерение, "
@@ -160,7 +161,7 @@ def _claude(post, projects):
            f"Проекты:\n{brief}\n\n"
            'Верни СТРОГО JSON: {"is_signal":bool,"project_id":str|null,"strength":1-5,'
            '"confidence":0-100,"temp":"hot|warm|cold","reason":"одно предложение","highlight":["фразы"]}')
-    data = _anthropic(CLASSIFY_MODEL, sys, f"Сообщение: {post['text']}", 400)
+    data = _anthropic(CLASSIFY_MODEL, sys, f"Сообщение: {post['text']}", 400, key)
     j = _json(data)
     if not j or not j.get("is_signal"):
         return None
@@ -186,7 +187,7 @@ def _claude(post, projects):
     draft = _anthropic(DRAFT_MODEL, dsys,
                        f"Где: {chat}\nЕго сообщение: «{post['text']}»\n"
                        f"Почему ему это зайдёт: {j.get('reason','')}\n\n"
-                       f"Напиши дружеский ответ именно на ЭТО сообщение, с ненавязчивой ссылкой.", 320) or ""
+                       f"Напиши дружеский ответ именно на ЭТО сообщение, с ненавязчивой ссылкой.", 320, key) or ""
     return {
         "project": proj["id"], "temp": j.get("temp", "warm"), "strength": j.get("strength", 3),
         "conf": j.get("confidence", 70), "why": j.get("reason", ""),
@@ -194,12 +195,13 @@ def _claude(post, projects):
     }
 
 
-def _anthropic(model, system, user, max_tokens):
+def _anthropic(model, system, user, max_tokens, key=None):
+    key = key or current_key()
     body = json.dumps({"model": model, "max_tokens": max_tokens, "system": system,
                        "messages": [{"role": "user", "content": user}]}).encode()
     req = urllib.request.Request(
         "https://api.anthropic.com/v1/messages", data=body,
-        headers={"x-api-key": current_key(), "anthropic-version": "2023-06-01",
+        headers={"x-api-key": key, "anthropic-version": "2023-06-01",
                  "content-type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=40) as r:

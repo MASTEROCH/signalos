@@ -1,15 +1,12 @@
 """
-tg_session.py — вход в Telegram прямо из интерфейса, без терминала.
-
-Telethon — асинхронный, а наш сервер — обычные потоки. Поэтому держим ОДИН выделенный
-event loop в фоновом потоке, который владеет клиентом между запросами:
-  send_code → (приходит код в Telegram) → sign_in_code → [если 2FA] sign_in_password → готово.
-После успешного входа сессия сохраняется в signalos.session, и сканер читает чаты сам.
+tg_session.py — вход в Telegram из интерфейса, мультитенант (сессия на пользователя).
+Один фоновый event loop держит клиентов между запросами; состояние ключуется по имени сессии.
+send_code → (код в Telegram) → sign_in_code → [2FA] sign_in_password → готово.
 """
-import asyncio, threading
+import os, asyncio, threading
 
 _loop = None
-_state = {"client": None, "phone": None, "hash": None}
+_state = {}   # session_name -> {client, phone, hash}
 
 
 def available():
@@ -33,58 +30,61 @@ def _run(coro, timeout=90):
     return asyncio.run_coroutine_threadsafe(coro, _loop).result(timeout)
 
 
-def send_code(api_id, api_hash, phone):
+def send_code(api_id, api_hash, phone, session):
     from telethon import TelegramClient
+    os.makedirs(os.path.dirname(session) or ".", exist_ok=True)
 
     async def _do():
-        if _state["client"]:
-            try:
-                await _state["client"].disconnect()
-            except Exception:
-                pass
-            _state["client"] = None
-        client = TelegramClient("signalos", int(api_id), api_hash)
+        st = _state.get(session)
+        if st and st.get("client"):
+            try: await st["client"].disconnect()
+            except Exception: pass
+        client = TelegramClient(session, int(api_id), api_hash)
         await client.connect()
-        if await client.is_user_authorized():           # уже входили раньше
-            me = await client.get_me()
-            await client.disconnect()
+        if await client.is_user_authorized():
+            me = await client.get_me(); await client.disconnect()
             return {"connected": True, "name": me.first_name}
         sent = await client.send_code_request(phone)
-        _state.update(client=client, phone=phone, hash=sent.phone_code_hash)
+        _state[session] = {"client": client, "phone": phone, "hash": sent.phone_code_hash}
         return {"sent": True}
 
     return _run(_do())
 
 
-def sign_in_code(code):
+def sign_in_code(code, session):
     from telethon.errors import SessionPasswordNeededError
 
     async def _do():
-        client = _state["client"]
-        if not client:
+        st = _state.get(session)
+        if not st:
             return {"error": "Сначала запроси код"}
         try:
-            await client.sign_in(_state["phone"], str(code).strip(), phone_code_hash=_state["hash"])
+            await st["client"].sign_in(st["phone"], str(code).strip(), phone_code_hash=st["hash"])
         except SessionPasswordNeededError:
             return {"need_password": True}
-        return await _finish(client)
+        return await _finish(session)
 
     return _run(_do())
 
 
-def sign_in_password(password):
+def sign_in_password(password, session):
     async def _do():
-        client = _state["client"]
-        if not client:
+        st = _state.get(session)
+        if not st:
             return {"error": "Сначала запроси код"}
-        await client.sign_in(password=password)
-        return await _finish(client)
+        await st["client"].sign_in(password=password)
+        return await _finish(session)
 
     return _run(_do())
 
 
-async def _finish(client):
-    me = await client.get_me()
-    await client.disconnect()      # освобождаем файл сессии для сканера
-    _state["client"] = None
+async def _finish(session):
+    st = _state.get(session)
+    me = await st["client"].get_me()
+    await st["client"].disconnect()
+    _state.pop(session, None)
     return {"connected": True, "name": me.first_name}
+
+
+def session_exists(session):
+    return os.path.exists(session + ".session")

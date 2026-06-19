@@ -344,6 +344,58 @@
   .switch input:checked + .track .knob{transform:translateX(20px)}
   .switch input:disabled ~ .track{opacity:.5}
 
+  /* ====== ЛЕНДИНГ + ВХОД (SaaS gate) ====== */
+  .gate{position:fixed; inset:0; z-index:200; display:none; overflow-y:auto;
+    background:radial-gradient(1200px 820px at 82% -12%, rgba(70,243,196,.16), transparent 58%),
+      radial-gradient(900px 600px at -8% 110%, rgba(91,140,255,.12), transparent 55%), var(--bg)}
+  .gate.show{display:block}
+  .gate-wrap{min-height:100vh; display:grid; grid-template-columns:1.08fr .92fr; max-width:1180px; margin:0 auto; gap:20px}
+  .gate-hero{display:flex; flex-direction:column; justify-content:center; padding:64px 28px 64px 56px; gap:22px; animation:fadeup .5s var(--ease)}
+  .gate-badge{display:inline-flex; align-items:center; gap:9px; align-self:flex-start; font-size:13px; font-weight:600; color:var(--sig);
+    background:rgba(70,243,196,.09); border:1.5px solid var(--sig2); border-radius:30px; padding:7px 15px}
+  .gate-hero h1{font-family:var(--display); font-size:50px; font-weight:800; line-height:1.06; letter-spacing:-.035em}
+  .gate-hero h1 span{color:var(--sig)}
+  .gate-hero .lead{font-size:18.5px; color:var(--mut); line-height:1.6; max-width:500px; font-weight:450}
+  .gate-feats{display:flex; flex-direction:column; gap:13px; margin-top:8px}
+  .gate-feat{display:flex; gap:13px; align-items:flex-start; font-size:15.5px; color:var(--ink); line-height:1.5}
+  .gate-feat .fi{width:30px; height:30px; flex:0 0 auto; border-radius:9px; display:grid; place-items:center;
+    background:rgba(70,243,196,.1); border:1px solid var(--sig2); color:var(--sig)}
+  .gate-feat b{font-weight:600}
+  .gate-feat small{display:block; color:var(--mut2); font-size:13.5px; font-weight:400; margin-top:1px}
+  .gate-side{display:flex; align-items:center; justify-content:center; padding:40px 56px 40px 28px}
+  .authcard{width:100%; max-width:390px; border:1px solid var(--line2); border-radius:26px; background:var(--panel);
+    backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); box-shadow:0 40px 100px -28px rgba(0,0,0,.8), var(--spec);
+    padding:34px 32px; animation:wizin .55s var(--ease)}
+  .authcard h2{font-family:var(--display); font-size:25px; font-weight:800; letter-spacing:-.02em; margin-bottom:5px}
+  .authcard .sub{font-size:14px; color:var(--mut); margin-bottom:22px}
+  .authcard label{display:block; font-size:13.5px; font-weight:600; margin:0 0 7px}
+  .authcard input{width:100%; font-family:var(--sans); font-size:16px; color:var(--ink); background:rgba(8,12,17,.55);
+    border:1.5px solid var(--line2); border-radius:13px; padding:14px 16px; outline:none; transition:.2s var(--ease); margin-bottom:15px}
+  .authcard input:focus{border-color:var(--sig2); background:rgba(70,243,196,.06); box-shadow:0 0 0 4px rgba(70,243,196,.1)}
+  .authcard .big{width:100%; justify-content:center; font-size:16px; padding:15px; margin-top:4px}
+  .authcard .toggle{text-align:center; font-size:14px; color:var(--mut); margin-top:18px}
+  .authcard .toggle a{color:var(--sig); cursor:pointer; font-weight:600}
+  .authcard .amsg{font-size:13.5px; color:var(--bad); margin-top:12px; min-height:18px; text-align:center}
+  .gate-foot{grid-column:1/-1; text-align:center; padding:18px; color:var(--mut2); font-size:12.5px}
+
+  /* user-чип в сайдбаре + биллинг */
+  .userchip{display:flex; align-items:center; gap:10px; padding:10px 11px; border:1px solid var(--line); border-radius:12px; background:var(--panel2)}
+  .userchip .av{width:32px; height:32px; flex:0 0 auto; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:14px;
+    color:#04130d; background:linear-gradient(180deg,var(--sig),var(--sig2))}
+  .userchip .uinfo{min-width:0; flex:1}
+  .userchip .uinfo b{font-size:13px; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .userchip .uinfo small{font-size:11px; color:var(--mut2); text-transform:uppercase; letter-spacing:.4px}
+  .userchip .lo{cursor:pointer; color:var(--mut2); padding:6px; border-radius:8px; transition:.15s; display:grid; place-items:center}
+  .userchip .lo:hover{color:var(--bad); background:rgba(255,107,107,.1)}
+  .plancard{border:1px solid var(--line); border-radius:16px; padding:18px; background:var(--panel2); margin-bottom:12px; position:relative}
+  .plancard.cur{border-color:var(--sig2); box-shadow:0 0 0 1px var(--sig2)}
+  .plancard .pn{font-family:var(--display); font-size:19px; font-weight:800}
+  .plancard .pp{font-size:14px; color:var(--mut2); margin:2px 0 10px}
+  .plancard .pp b{color:var(--ink); font-size:22px; font-family:var(--display)}
+  .plancard .pf{font-size:13px; color:var(--mut); line-height:1.5; margin-bottom:14px}
+  .plancard .curbadge{position:absolute; top:16px; right:16px; font-size:11px; font-weight:700; color:#04130d;
+    background:linear-gradient(180deg,var(--sig),var(--sig2)); padding:3px 10px; border-radius:20px}
+
   /* ====== АДАПТИВ / МОБИЛЬНАЯ ВЁРСТКА ====== */
   @media (max-width: 860px){
     body{overflow:auto}
@@ -404,6 +456,17 @@
     .draft textarea{font-size:15.5px}
   }
 
+  @media (max-width: 900px){
+    .gate-wrap{grid-template-columns:1fr; gap:0}
+    .gate-side{order:-1; padding:36px 20px 8px}
+    .gate-hero{padding:20px 24px 44px; text-align:center; align-items:center}
+    .gate-badge{align-self:center}
+    .gate-hero h1{font-size:36px}
+    .gate-hero .lead{font-size:16.5px}
+    .gate-feats{text-align:left; max-width:420px}
+    .authcard{max-width:440px}
+  }
+
   /* мягче для тех, кто не любит анимации */
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:.01ms!important; transition-duration:.05ms!important}
@@ -424,9 +487,8 @@
     <div class="seclabel" style="margin-top:6px">Источники</div>
     <div class="sources" id="sources"></div>
 
-    <div class="side-foot">
+    <div class="side-foot" id="sidefoot">
       <div class="addproj" onclick="addProduct()">+ Добавить продукт</div>
-      <div class="pill demo" id="modepill"><span class="live"></span> <b id="modetxt" style="color:var(--ink)">Демо-режим</b></div>
     </div>
   </aside>
 
@@ -469,6 +531,9 @@
     <div id="setbody"></div>
   </div>
 </div>
+
+<!-- ====== ЛЕНДИНГ + ВХОД (SaaS gate) ====== -->
+<div class="gate" id="gate"></div>
 
 <script>
 /* ============ РЕЖИМ: LIVE (через сервер) или ДЕМО (открыт как файл) ============ */
@@ -545,14 +610,21 @@ const srcIcon   = s => ({hackernews:IC.hn, reddit:IC.reddit, bluesky:IC.bluesky,
 async function api(path, opts){ const r = await fetch(path, opts); if(!r.ok) throw new Error(r.status); return r.json(); }
 
 /* ============ ЗАГРУЗКА ============ */
+let ME = null;
 async function init(){
   if(!LIVE){ demoMode(); renderAll(); return; }   // открыт как файл → демо
   try{
-    const status = await api('/api/status'); claudeOn = status.claude;
-    if(!status.configured){ openWizard(); return; }   // первый запуск → мастер настройки
-    await loadMain();
-    if(status.scanning){ scanning = true; pollScan(); }
+    const me = await api('/api/auth/me'); ME = me.user;
+    if(!ME){ showGate(); return; }                 // не вошёл → лендинг + вход
+    await startApp();
   }catch(e){ demoMode(); renderAll(); }
+}
+async function startApp(){
+  hideGate(); renderUser();
+  const status = await api('/api/status'); claudeOn = status.claude;
+  if(!status.configured){ openWizard(); return; }
+  await loadMain();
+  if(status.scanning){ scanning = true; pollScan(); }
 }
 async function loadMain(){
   PROJECTS = await api('/api/projects');
@@ -571,11 +643,11 @@ async function reloadQueue(){
   try{ const st = await api('/api/stats'); totalToday = st.today; }catch(e){ totalToday = QUEUE.length; }
 }
 function setMode(live){
-  const pill = document.getElementById('modepill');
+  const pill = document.getElementById('modepill');   // в SaaS-режиме элемента нет — безопасно выходим
+  if(!pill) return;
   pill.classList.toggle('demo', !live);
-  document.getElementById('modetxt').textContent = live
-    ? ('Живой режим · Claude ' + (claudeOn ? 'ON' : 'OFF'))
-    : 'Демо-режим';
+  const t = document.getElementById('modetxt');
+  if(t) t.textContent = live ? ('Живой режим · Claude ' + (claudeOn ? 'ON' : 'OFF')) : 'Демо-режим';
 }
 
 /* ============ РЕНДЕР ============ */
@@ -905,7 +977,7 @@ async function wizFinish(){
 }
 
 /* ============ ПАНЕЛЬ НАСТРОЕК (state-driven) ============ */
-const SET = {status:null, sources:[], tgState:'idle', msg:'', msgC:'', cmsg:'', cmsgC:'',
+const SET = {status:null, sources:[], billing:null, tgState:'idle', msg:'', msgC:'', cmsg:'', cmsgC:'',
   tg:{api_id:'',api_hash:'',phone:'',code:'',password:'',chats:''}};
 
 async function openSettings(){
@@ -915,6 +987,7 @@ async function openSettings(){
   try{
     SET.status = await api('/api/settings');
     SET.sources = (await api('/api/sources')).sources;
+    SET.billing = await api('/api/billing');
     SET.tg.chats = (SET.status.telegram.chats||[]).join(', ');
     SET.tgState = SET.status.telegram.connected ? 'connected' : 'idle';
     SET.msg=''; SET.msgC=''; SET.cmsg=''; SET.cmsgC='';
@@ -956,7 +1029,31 @@ function renderSettings(){
       <input id="set-claude" type="password" placeholder="${st.claude ? 'Сохранён '+st.claude_masked+' — вставь новый' : 'sk-ant-...'}">
       <button class="setbtn" onclick="saveClaude()">Сохранить и проверить</button>
       <div class="setmsg ${SET.cmsgC}" id="claude-msg">${SET.cmsg}</div>
-    </div>`;
+    </div>
+
+    ${SET.billing ? `<div class="setsec">
+      <div class="row"><span class="ttl">Тариф и аккаунт</span>
+        <span class="statuschip on">${(SET.billing.plans[SET.billing.plan]||{}).name||SET.billing.plan}</span></div>
+      <div class="desc">${ME?esc(ME.email):''}</div>
+      ${Object.entries(SET.billing.plans).map(([id,pl])=>`
+        <div class="plancard ${id===SET.billing.plan?'cur':''}">
+          ${id===SET.billing.plan?'<span class="curbadge">текущий</span>':''}
+          <div class="pn">${pl.name}</div>
+          <div class="pp"><b>$${pl.price}</b>${pl.price?' /мес':''}</div>
+          <div class="pf">${pl.channels} · до ${pl.products} продукт(ов)</div>
+          ${id!==SET.billing.plan ? `<button class="setbtn ${pl.price?'':'sec'}" onclick="upgrade('${id}')">${pl.price?('Перейти на '+pl.name):'Вернуться на Free'}</button>` : ''}
+        </div>`).join('')}
+      <div style="margin-top:4px"><button class="setbtn sec" onclick="logout()">Выйти из аккаунта</button></div>
+    </div>` : ''}`;
+}
+
+async function upgrade(plan){
+  try{
+    await api('/api/billing/upgrade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan})});
+    toast('Тариф изменён на <b>'+plan+'</b> (демо — оплата подключится позже)');
+    const me=await api('/api/auth/me'); ME=me.user; renderUser();
+    SET.billing=await api('/api/billing'); renderSettings();
+  }catch(e){ toast('Ошибка смены тарифа'); }
 }
 
 function tgLoginHTML(T){
@@ -1040,6 +1137,68 @@ async function toggleChannel(id, on){
     SET.sources=(await api('/api/sources')).sources; renderSources();
     toast(on?'Канал включён':'Канал выключен');
   }catch(e){}
+}
+
+/* ============ ЛЕНДИНГ + ВХОД ============ */
+let authMode='register', authEmail='', authPass='';
+function showGate(){ document.getElementById('gate').classList.add('show'); renderGate(); }
+function hideGate(){ document.getElementById('gate').classList.remove('show'); }
+
+function renderGate(){
+  const reg = authMode==='register';
+  document.getElementById('gate').innerHTML = `
+   <div class="gate-wrap">
+     <div class="gate-hero">
+       <div class="gate-badge">${IC.radar} SignalOS</div>
+       <h1>Находи <span>клиентов</span>, пока другие сливают бюджет на рекламу</h1>
+       <div class="lead">Радар сам ищет в интернете людей, которые прямо сейчас пишут «посоветуйте…», «ищу…» — то, что решает твой продукт. Ты только отвечаешь. Без блога, без бюджета.</div>
+       <div class="gate-feats">
+         <div class="gate-feat"><span class="fi">${IC.search}</span><div><b>6 каналов из коробки</b><small>HackerNews, Reddit, Bluesky, Lemmy, Google Alerts, Telegram</small></div></div>
+         <div class="gate-feat"><span class="fi">${IC.spark}</span><div><b>Готовый ответ под каждое сообщение</b><small>ИИ пишет по-человечески, со ссылкой — скопировал и отправил</small></div></div>
+         <div class="gate-feat"><span class="fi">${IC.radar}</span><div><b>Работает само</b><small>Сканирует круглосуточно — ты заходишь раз в день</small></div></div>
+       </div>
+     </div>
+     <div class="gate-side">
+       <div class="authcard">
+         <h2>${reg?'Создать аккаунт':'С возвращением'}</h2>
+         <div class="sub">${reg?'Бесплатно. Первый клиент — сегодня.':'Войди, чтобы продолжить'}</div>
+         <label>Email</label>
+         <input id="au-email" type="email" autocomplete="email" placeholder="you@email.com" value="${esc(authEmail)}" oninput="authEmail=this.value" onkeydown="if(event.key==='Enter')doAuth()">
+         <label>Пароль</label>
+         <input id="au-pass" type="password" autocomplete="${reg?'new-password':'current-password'}" placeholder="${reg?'минимум 6 символов':'пароль'}" oninput="authPass=this.value" onkeydown="if(event.key==='Enter')doAuth()">
+         <button class="setbtn big" onclick="doAuth()">${reg?'Создать аккаунт →':'Войти →'}</button>
+         <div class="amsg" id="au-msg"></div>
+         <div class="toggle">${reg?'Уже есть аккаунт?':'Нет аккаунта?'} <a onclick="authMode='${reg?'login':'register'}';renderGate()">${reg?'Войти':'Создать'}</a></div>
+       </div>
+     </div>
+     <div class="gate-foot">Бесплатный тариф навсегда · Платные тарифы для Telegram и авто-поиска · Твои данные — только твои</div>
+   </div>`;
+  setTimeout(()=>{ const e=document.getElementById('au-email'); if(e && !authEmail) e.focus(); }, 60);
+}
+
+async function doAuth(){
+  const msg=document.getElementById('au-msg');
+  if(!authEmail || authPass.length<6){ msg.style.color='var(--bad)'; msg.textContent='Email и пароль (минимум 6 символов)'; return; }
+  msg.style.color='var(--mut)'; msg.textContent='Секунду…';
+  try{
+    const r=await fetch('/api/auth/'+authMode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:authEmail,password:authPass})});
+    const j=await r.json();
+    if(!r.ok){ msg.style.color='var(--bad)'; msg.textContent=j.error||'Ошибка'; return; }
+    ME=j.user; authPass=''; await startApp();
+  }catch(e){ msg.style.color='var(--bad)'; msg.textContent='Нет связи с сервером'; }
+}
+async function logout(){ try{ await fetch('/api/auth/logout',{method:'POST'}); }catch(e){} location.reload(); }
+
+function renderUser(){
+  const f=document.getElementById('sidefoot'); if(!f || !ME) return;
+  const initial=(ME.email||'?')[0].toUpperCase();
+  f.innerHTML = `
+    <div class="addproj" onclick="addProduct()">+ Добавить продукт</div>
+    <div class="userchip">
+      <div class="av" onclick="openSettings()" style="cursor:pointer">${initial}</div>
+      <div class="uinfo" onclick="openSettings()" style="cursor:pointer"><b>${esc(ME.email)}</b><small>${ME.plan} план</small></div>
+      <div class="lo" title="Выйти" onclick="logout()">${IC.ext}</div>
+    </div>`;
 }
 
 function initIcons(){

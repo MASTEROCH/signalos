@@ -10,22 +10,23 @@ from . import detect_lang
 
 
 def fetch(keywords, cfg):
-    api_id = int(os.environ.get("TELEGRAM_API_ID", "0"))
-    api_hash = os.environ.get("TELEGRAM_API_HASH", "")
+    api_id = int(cfg.get("api_id") or os.environ.get("TELEGRAM_API_ID", "0") or 0)
+    api_hash = cfg.get("api_hash") or os.environ.get("TELEGRAM_API_HASH", "")
+    session = cfg.get("session", "signalos")
     chats = cfg.get("chats", [])
     if not (api_id and api_hash and chats):
         return []
     try:
-        from telethon.sync import TelegramClient
+        from telethon.sync import TelegramClient  # noqa
     except ImportError:
         print("  ⚠ telegram: установи  pip install telethon"); return []
-    return asyncio.run(_pull(api_id, api_hash, chats, cfg.get("per_chat", 40)))
+    return asyncio.run(_pull(api_id, api_hash, session, chats, cfg.get("per_chat", 40)))
 
 
-async def _pull(api_id, api_hash, chats, per_chat):
+async def _pull(api_id, api_hash, session, chats, per_chat):
     from telethon import TelegramClient
     out = []
-    async with TelegramClient("signalos", api_id, api_hash) as client:
+    async with TelegramClient(session, api_id, api_hash) as client:
         for chat in chats:
             try:
                 ent = await client.get_entity(chat)
