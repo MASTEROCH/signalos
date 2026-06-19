@@ -25,6 +25,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   h1,h2,h3{font-family:var(--display); letter-spacing:-.02em}
+  .ico{width:1.05em; height:1.05em; vertical-align:-0.16em; flex:0 0 auto; display:inline-block}
   body{
     font-family:var(--sans); color:var(--ink); background:var(--bg);
     background-image:
@@ -419,19 +420,19 @@
   <main class="main">
     <header class="top">
       <h1 id="feedtitle">Твои клиенты <small id="feedsub"></small></h1>
-      <button class="btn go scan" id="scanbtn" onclick="scanNow()">🔍 Найти клиентов</button>
-      <button class="btn iconbtn" id="setbtn" onclick="openSettings()" title="Настройки и ключи">⚙</button>
+      <button class="btn go scan" id="scanbtn" onclick="scanNow()">Найти клиентов</button>
+      <button class="btn iconbtn" id="setbtn" onclick="openSettings()" title="Настройки и ключи"></button>
       <div class="stats">
         <div class="stat"><b id="st-today">—</b><span>найдено за сутки</span></div>
         <div class="stat s"><b id="st-queue">—</b><span>ждут ответа</span></div>
-        <div class="stat h"><b id="st-hot">—</b><span>🔥 горячих</span></div>
+        <div class="stat h"><b id="st-hot">—</b><span id="lbl-hot">горячих</span></div>
         <div class="stat"><b id="st-done">0</b><span>ответил</span></div>
       </div>
     </header>
 
     <div class="feed" id="feed">
       <div class="hint">
-        <span>📋 Скопируй ответ → открой оригинал → вставь и отправь</span>
+        <span id="hint-flow">Скопируй ответ → открой оригинал → вставь и отправь</span>
         <span style="margin-left:auto; color:var(--mut2)">Горячие клавиши: <span class="kbd">A</span>скопировать <span class="kbd">S</span>пропустить <span class="kbd">J</span><span class="kbd">K</span>листать</span>
       </div>
       <div id="cards"></div>
@@ -459,6 +460,28 @@
 <script>
 /* ============ РЕЖИМ: LIVE (через сервер) или ДЕМО (открыт как файл) ============ */
 const LIVE = location.protocol.startsWith('http');
+
+/* ============ SVG-ИКОНКИ (единый line-стиль, currentColor) ============ */
+const IC = {
+  radar:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12 19 5"/><path d="M4 12a8 8 0 1 0 8-8"/><path d="M8 12a4 4 0 1 0 4-4"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>',
+  search:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+  gear:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  flame:'<svg class="ico" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2c1 3-1 4.2-2.2 6C8.5 9.7 9 11.6 10.5 12c1-.8 1.1-1.9 1.1-3 1.2 1.5 3.4 2.8 3.4 5.2a5 5 0 0 1-10 0c0-2.6 2-4.2 3-6.2C9.4 5.5 10.2 4 12 2z"/></svg>',
+  spark:'<svg class="ico" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l1.7 6.3L20 10l-6.3 1.7L12 18l-1.7-6.3L4 10l6.3-1.7z"/></svg>',
+  send:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>',
+  rss:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>',
+  chat:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  copy:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+  ext:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg>',
+  check:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  pin:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  hand:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8a6 6 0 0 0 6 6h2a6 6 0 0 0 6-6v-3a2 2 0 0 0-4 0v1"/></svg>',
+  hn:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 7.5l4 5 4-5M12 12.5V17"/></svg>',
+  reddit:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="14" r="6.5"/><circle cx="9.5" cy="14" r=".9" fill="currentColor" stroke="none"/><circle cx="14.5" cy="14" r=".9" fill="currentColor" stroke="none"/><path d="M9.5 16.5c1.3.9 3.7.9 5 0"/><circle cx="18.5" cy="6" r="1.6"/><path d="M13.5 6.2 17 5.6"/></svg>',
+  bluesky:'<svg class="ico" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 10.6C10.4 7.4 6.8 5 4.8 5.6 3.4 6 3.9 9 5 11c.8 1.4 2.6 2 4.1 2-1.6.3-3.2 1-2.6 2.9.4 1.4 2.5 1.8 3.6.6.8-.8 1.3-1.9 1.9-2.9.6 1 1.1 2.1 1.9 2.9 1.1 1.2 3.2.8 3.6-.6.6-1.9-1-2.6-2.6-2.9 1.5 0 3.3-.6 4.1-2 1.1-2 1.6-5 .2-5.4-2-.6-5.6 1.8-7.2 5z"/></svg>',
+  lemmy:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 7a3 3 0 0 1 0 6"/><path d="M18.5 20c0-2-.7-3.6-1.8-4.6"/></svg>',
+};
+const ico = (name, cls='') => IC[name] ? IC[name].replace('class="ico"', `class="ico ${cls}"`) : '';
 
 const DEMO_PROJECTS = [
   {id:'audit',  name:'ROCH Audit',  color:'#E1FE71', link:'roch-audit.com'},
@@ -503,7 +526,7 @@ let filter = 'all', sel = 0, done = 0, claudeOn = false, scanning = false, total
 const projColor = id => (PROJECTS.find(p=>p.id===id)||{}).color || '#46f3c4';
 const projName  = id => (PROJECTS.find(p=>p.id===id)||{}).name || id;
 const visible   = () => QUEUE.filter(s => filter==='all' || s.project===filter);
-const srcIcon   = s => ({hackernews:'Y', reddit:'👽', bluesky:'🦋', lemmy:'🐭', rss:'📡', telegram:'✈'}[s] || '◎');
+const srcIcon   = s => ({hackernews:IC.hn, reddit:IC.reddit, bluesky:IC.bluesky, lemmy:IC.lemmy, rss:IC.rss, telegram:IC.send}[s] || IC.radar);
 
 async function api(path, opts){ const r = await fetch(path, opts); if(!r.ok) throw new Error(r.status); return r.json(); }
 
@@ -596,10 +619,10 @@ function renderCards(){
         </div>
       </div>
 
-      ${i===0 && !coachDone() ? `<div class="coach"><b>👇 Что делать:</b> нажми «Скопировать ответ», открой оригинал, вставь и отправь. Всё! <span class="cx" onclick="event.stopPropagation();dismissCoach()">✕</span></div>` : ''}
+      ${i===0 && !coachDone() ? `<div class="coach">${ico('hand')} <b>Что делать:</b> нажми «Скопировать ответ», открой оригинал, вставь и отправь. Всё! <span class="cx" onclick="event.stopPropagation();dismissCoach()">✕</span></div>` : ''}
 
       <div class="quote">
-        <div class="h">💬 Что человек написал</div>
+        <div class="h">${ico('chat')} Что человек написал</div>
         ${highlight(s.text, s.hl)}
       </div>
 
@@ -610,13 +633,13 @@ function renderCards(){
       </div>
 
       <div class="draft">
-        <div class="h"><span class="ai">✦ Готовый ответ</span> · ${claudeOn?'написан Claude':'заготовка'} · правь как хочешь</div>
+        <div class="h"><span class="ai">${ico('spark')} Готовый ответ</span> · ${claudeOn?'написан Claude':'заготовка'} · правь как хочешь</div>
         <textarea id="ta-${s.id}" oninput="autosize(this)">${(s.draft||'').replace(/</g,'&lt;')}</textarea>
       </div>
 
       <div class="actions">
-        <button class="btn go" onclick="event.stopPropagation();approve(${s.id})">📋 Скопировать ответ <span class="k">A</span></button>
-        ${s.url && s.url!=='#' ? `<a class="btn" href="${s.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ Открыть и ответить</a>` : ''}
+        <button class="btn go" onclick="event.stopPropagation();approve(${s.id})">${ico('copy')} Скопировать ответ <span class="k">A</span></button>
+        ${s.url && s.url!=='#' ? `<a class="btn" href="${s.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ico('ext')} Открыть и ответить</a>` : ''}
         <button class="btn skip" onclick="event.stopPropagation();skip(${s.id})">Не моё <span class="k">S</span></button>
       </div>
     </div>`).join('');
@@ -627,7 +650,7 @@ function renderCards(){
 
 function onboardingHTML(){
   if(!LIVE){
-    return `<div class="empty"><div class="radar"></div><h3>Это демо 🎯</h3>
+    return `<div class="empty"><div class="radar"></div><h3>Это демо</h3>
       <div>Чтобы радар искал <b>реальных</b> клиентов — запусти <code>./run.sh</code> в папке signalos.</div></div>`;
   }
   if(scanning){
@@ -635,9 +658,9 @@ function onboardingHTML(){
       <div>Радар прочёсывает интернет. Первые люди появятся здесь через минуту — можно не ждать, вкладка обновится сама.</div></div>`;
   }
   return `<div class="empty"><div class="radar"></div>
-    <h3>Пока тихо — но радар на связи 🛰</h3>
+    <h3>Пока тихо — но радар на связи</h3>
     <div style="max-width:440px;margin:0 auto 18px">Новых клиентов прямо сейчас не нашлось. Я проверяю источники каждые 15 минут сам. Можешь поискать вручную:</div>
-    <button class="btn go" onclick="scanNow()">🔍 Найти клиентов сейчас</button></div>`;
+    <button class="btn go" onclick="scanNow()">${ico('search')} Найти клиентов сейчас</button></div>`;
 }
 
 function updateStats(){
@@ -694,10 +717,10 @@ async function scanNow(){
   try{
     const res = await fetch('/api/scan',{method:'POST'}).then(r=>r.json());
     await reloadQueue();
-    toast(`Найдено <b>${res.signals||0}</b> новых сигналов из ${res.fetched||0} сообщений`);
+    toast(`Найдено <b>${res.signals||0}</b> новых клиентов из ${res.fetched||0} сообщений`);
   }catch(e){ toast('Ошибка сканирования'); }
   scanning = false;
-  btn.classList.remove('busy'); btn.textContent='⟳ Сканировать';
+  btn.classList.remove('busy'); btn.innerHTML = IC.search + ' Найти клиентов';
   renderAll();
 }
 async function pollScan(){
@@ -790,12 +813,10 @@ function wizFinishing(text){
 function wizConfirm(){
   const chips = WIZ.phrases.map((p,i)=>`<span class="chip">${esc(p)} <x onclick="rmChip(${i})">✕</x></span>`).join('');
   return `<h2>Кого мне искать?</h2>
-    ${WIZ.smart?'<div class="smartbadge">✦ Claude подобрал это под твой продукт</div>':''}
+    ${WIZ.smart?`<div class="smartbadge">${ico('spark')} Claude подобрал это под твой продукт</div>`:''}
     <p>Это фразы, которые пишет человек, когда ему нужен <b style="color:var(--ink)">твой</b> продукт. Убери лишнее, добавь своё.</p>
     <div class="left">
-      <label class="wizlabel">Название продукта</label>
-      <input id="w-name" value="${esc(WIZ.name)}" oninput="WIZ.name=this.value" placeholder="Beauty Bot">
-      <label class="wizlabel" style="margin-top:14px">Что пишут твои клиенты</label>
+      <label class="wizlabel">Что пишут твои клиенты</label>
       <div class="chips">${chips || '<span style="color:var(--mut2);font-size:12.5px">пока пусто — добавь фразу ниже</span>'}</div>
       <div class="chipadd">
         <input id="w-chip" value="${esc(WIZ.newchip)}" oninput="WIZ.newchip=this.value" onkeydown="if(event.key==='Enter')addChip()" placeholder="например: ищу бота для записи">
@@ -804,7 +825,7 @@ function wizConfirm(){
     </div>
     <div class="wizbtns">
       <button class="wbtn ghost" onclick="wizGo(1)">← Назад</button>
-      <button class="wbtn go" onclick="wizFinish()" ${WIZ.phrases.length?'':'disabled'}>🛰 Включить радар</button>
+      <button class="wbtn go" onclick="wizFinish()" ${WIZ.phrases.length?'':'disabled'}>${ico('radar')} Включить радар</button>
     </div>`;
 }
 
@@ -832,18 +853,28 @@ async function wizSuggest(){
 }
 
 async function wizFinish(){
+  if(!LIVE){ toast('Это демо. Запусти <b>./run.sh</b>, чтобы включить радар по-настоящему'); return; }
   WIZ.step = 99; renderWiz();
   document.getElementById('wizscreen').innerHTML = wizFinishing('Включаю радар и ищу первых клиентов…');
   try{
-    await api('/api/setup', {method:'POST', headers:{'Content-Type':'application/json'},
+    const r = await fetch('/api/setup', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({description:WIZ.description, link:WIZ.link, name:WIZ.name,
         phrases:WIZ.phrases, tone:WIZ.tone, subreddits:WIZ.subreddits, alerts:WIZ.alerts})});
+    if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||('сервер вернул '+r.status)); }
     scanning = true;
     closeWizard();
     await loadMain();
-    toast('🛰 Радар включён! Ищу первых клиентов — они появятся через минуту');
+    toast('Радар включён! Ищу первых клиентов — они появятся через минуту');
     pollScan();
-  }catch(e){ document.getElementById('wizscreen').innerHTML = wizConfirm(); toast('Ошибка настройки, попробуй ещё раз'); }
+  }catch(e){
+    const m = (e && e.message) ? e.message : 'нет связи с сервером';
+    document.getElementById('wizscreen').innerHTML =
+      `<div style="text-align:center">
+        <h2 style="color:var(--bad)">Не получилось включить</h2>
+        <p>${esc(m)}.<br>Проверь, что приложение запущено через <b style="color:var(--ink)">./run.sh</b> и страница открыта на том же адресе.</p>
+        <div class="wizbtns"><button class="wbtn go" onclick="wizGo(2)">← Вернуться и попробовать снова</button></div>
+      </div>`;
+  }
 }
 
 /* ============ ПАНЕЛЬ НАСТРОЕК (state-driven) ============ */
@@ -873,14 +904,14 @@ function renderSettings(){
     <div class="setsub">Вставь данные в поля — всё применится сразу, без перезапуска и терминала.</div>
 
     <div class="setsec">
-      <div class="row"><span class="ttl">✈ Telegram</span>
+      <div class="row"><span class="ttl">${ico('send')} Telegram</span>
         <span class="statuschip ${conn?'on':'off'}">${conn?'подключён':'не подключён'}</span></div>
       ${conn ? tgConnectedHTML() : tgLoginHTML(T)}
       <div class="setmsg ${SET.msgC}" id="tg-msg">${SET.msg}</div>
     </div>
 
     <div class="setsec">
-      <div class="row"><span class="ttl">📡 Каналы поиска</span></div>
+      <div class="row"><span class="ttl">${ico('rss')} Каналы поиска</span></div>
       <div class="desc">Где радар ищет клиентов. Включай и выключай как хочешь.</div>
       ${SET.sources.map(s=>`
         <div class="chanrow">
@@ -892,7 +923,7 @@ function renderSettings(){
     </div>
 
     <div class="setsec">
-      <div class="row"><span class="ttl">✦ Умный режим (Claude)</span>
+      <div class="row"><span class="ttl">${ico('spark')} Умный режим (Claude)</span>
         <span class="statuschip ${st.claude?'on':'off'}">${st.claude?'включён':'выключен'}</span></div>
       <div class="desc">С ключом подсказки фраз и готовые ответы становятся как от живого эксперта. Ключ — на console.anthropic.com, стоит копейки. (Можно позже.)</div>
       <input id="set-claude" type="password" placeholder="${st.claude ? 'Сохранён '+st.claude_masked+' — вставь новый' : 'sk-ant-...'}">
@@ -945,7 +976,7 @@ async function tgSignIn(){
   try{
     const body = SET.tgState==='password' ? {password:SET.tg.password} : {code:SET.tg.code};
     const r = await api('/api/telegram/sign_in',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(r.connected){ toast('🛰 Telegram подключён как '+(r.name||'')); openSettings(); return; }
+    if(r.connected){ toast('Telegram подключён как '+(r.name||'')); openSettings(); return; }
     else if(r.need_password){ SET.tgState='password'; SET.msg='У тебя включён облачный пароль (2FA) — введи его'; SET.msgC=''; }
     else { SET.msg=r.error||'Не удалось войти (проверь код)'; SET.msgC='err'; }
   }catch(e){ SET.msg='Ошибка входа'; SET.msgC='err'; }
@@ -984,6 +1015,14 @@ async function toggleChannel(id, on){
   }catch(e){}
 }
 
+function initIcons(){
+  const set=(id,html)=>{const e=document.getElementById(id); if(e) e.innerHTML=html;};
+  set('scanbtn', IC.search+' Найти клиентов');
+  set('setbtn', IC.gear);
+  set('lbl-hot', IC.flame+' горячих');
+  set('hint-flow', IC.copy+' Скопируй ответ → открой оригинал → вставь и отправь');
+}
+initIcons();
 init();
 </script>
 </body>
