@@ -18,6 +18,15 @@ def current_key():
     """Читаем ключ динамически — чтобы включение из настроек работало без рестарта."""
     return os.environ.get("ANTHROPIC_API_KEY", "")
 
+
+def utm_link(project):
+    """Ссылка с UTM-метками — чтобы замкнуть петлю: искра → клик → прохождение → шер."""
+    link = (project.get("link") or "").strip()
+    if not link:
+        return ""
+    sep = "&" if "?" in link else "?"
+    return f"{link}{sep}utm_source=signalos&utm_medium=radar&utm_campaign={project.get('id','')}"
+
 INTENT = {  # фразы-маркеры намерения → язык-независимый сигнал «человек ищет решение»
     "ru": ["посоветуйте", "подскажите", "кто знает", "ищу", "нужен", "нужна", "помогите",
            "как мне", "не понимаю", "теряю", "не успеваю", "посоветовать", "порекомендуйте",
@@ -70,15 +79,22 @@ def _free(post, projects):
         toks = keyword_tokens(p.get("keywords", []))
         hit_toks = [t for t in toks if _wordin(t, low)]
         full_hits = [k.lower() for k in p.get("keywords", []) if k.lower() in low]   # бонус за фразу целиком
-        # одиночный общий токен — слишком шумно: нужна фраза целиком или ≥2 токена
-        if not (full_hits or len(hit_toks) >= 2):
+        # РЕЗОНАНС: эмоциональная открытость усиливает, сухое/научное/коммерческое штрафует
+        res = p.get("resonance") or {}
+        boost_hits = sum(1 for b in res.get("boost", []) if b and b.lower() in low)
+        pen_hits = sum(1 for pn in res.get("penalty", []) if pn and pn.lower() in low)
+        # пропускаем, если есть фраза целиком, ИЛИ ≥2 ключ-токена, ИЛИ живой эмоциональный маркер
+        if not (full_hits or len(hit_toks) >= 2 or boost_hits >= 1):
             continue
-        # анти-фейк: нужен реальный СИГНАЛ НАМЕРЕНИЯ (вопрос / просьба / боль), а не просто упоминание слова
-        if not (intent_hits or q):
+        # анти-фейк: нужен реальный сигнал намерения/эмоции, а не просто упоминание слова
+        if not (intent_hits or q or boost_hits >= 1):
             continue
-        score = len(hit_toks) + len(full_hits) * 2 + intent_hits * 2 + q
+        # сухой/исследователь/покупатель без живой эмоции — это НЕ наш человек
+        if pen_hits and not boost_hits:
+            continue
+        score = len(hit_toks) + len(full_hits) * 2 + intent_hits * 2 + q + boost_hits * 4 - pen_hits * 5
         if score > best_score:
-            best, best_score, best_hits = p, score, (full_hits or hit_toks)
+            best, best_score, best_hits = p, score, (full_hits or hit_toks or res.get("boost", [])[:3])
     if not best or best_score < 3:
         return None
     strength = max(1, min(5, best_score))
@@ -100,7 +116,7 @@ def _template(post, project, hits=None):
     lang = post["lang"]
     text = post["text"]
     low = text.lower()
-    link = project.get("link", "")
+    link = utm_link(project)
     idx = sum(ord(c) for c in text[:50]) % 3            # детерминированная вариативность (не всё одинаково)
 
     # тип сигнала
@@ -167,7 +183,7 @@ def make_draft(post, project, key=None, reason="", variant=False):
         f"в ответ конкретному человеку. НЕ продавец и НЕ официальный представитель компании. "
         f"Вайб: «о, у меня была та же боль — наткнулся на штуку, держи, попробуй».\n"
         f"Продукт, которым делишься: {project['one_liner']}\n"
-        f"ССЫЛКА (вставляй ОБЯЗАТЕЛЬНО, естественно в тексте): {project['link']}\n"
+        f"ССЫЛКА (вставляй ОБЯЗАТЕЛЬНО, естественно в тексте, ОДИН раз, между делом): {utm_link(project)}\n"
         f"Tone of voice: {project.get('tone','')}. Язык ответа строго: {'русский' if lang=='ru' else 'английский'}.\n"
         "Правила: реагируй на КОНКРЕТНЫЕ слова сообщения; без шаблонных зачинов и рекламы; "
         "сначала польза/эмпатия — потом ненавязчиво ссылка; можно сказать что это твой проект, но необязательно; "
@@ -198,15 +214,29 @@ def improve_keywords(project, good, bad, key):
     return _json(_anthropic(DRAFT_MODEL, sys, u, 700, key))
 
 
-# ---------- РЕЖИМ CLAUDE ----------
+# ---------- РЕЖИМ CLAUDE (резонанс) ----------
+def _proj_brief(p):
+    s = f"- id={p['id']} | {p['name']}: {p['one_liner']} | аудитория: {p['audience']}"
+    res = p.get("resonance") or {}
+    if res.get("ideal"):
+        s += f"\n    ИДЕАЛЬНЫЙ момент (резонанс 5/5): {res['ideal']}"
+    if res.get("boost"):
+        s += f"\n    усиливай за: {', '.join(res['boost'][:10])}"
+    if res.get("penalty"):
+        s += f"\n    ЖЁСТКО штрафуй (это НЕ наш человек, резонанс 1/5): {', '.join(res['penalty'][:10])}"
+    return s
+
+
 def _claude(post, projects, key):
-    brief = "\n".join(f"- id={p['id']} | {p['name']}: {p['one_liner']} | аудитория: {p['audience']}"
-                      for p in projects)
-    sys = ("Ты — radar лидов. Дано публичное сообщение. Реши: выражает ли автор боль/намерение, "
-           "которое решает один из проектов. Большинство — шум (is_signal=false без колебаний). "
+    brief = "\n".join(_proj_brief(p) for p in projects)
+    sys = ("Ты — радар РЕЗОНАНСА, а не поиск по словам. Дано публичное сообщение. Оцени не «есть ли ключевик», "
+           "а НАСКОЛЬКО человек ЭМОЦИОНАЛЬНО ОТКРЫТ ПРЯМО СЕЙЧАС и совпадает с идеальным моментом проекта. "
+           "Живой человек, который растерян / задаёт вопрос о себе / выражает боль — высокий резонанс. "
+           "Сухой/научный/исследовательский/чисто коммерческий тон с тем же словом — НИЗКИЙ резонанс. "
+           "Большинство — шум (is_signal=false без колебаний). У каждого проекта свои маркеры усиления/штрафа — учитывай их.\n"
            f"Проекты:\n{brief}\n\n"
-           'Верни СТРОГО JSON: {"is_signal":bool,"project_id":str|null,"strength":1-5,'
-           '"confidence":0-100,"temp":"hot|warm|cold","reason":"одно предложение","highlight":["фразы"]}')
+           'Верни СТРОГО JSON: {"is_signal":bool,"project_id":str|null,"strength":1-5 (это РЕЗОНАНС),'
+           '"confidence":0-100,"temp":"hot|warm|cold","reason":"одно предложение почему резонирует","highlight":["фразы"]}')
     data = _anthropic(CLASSIFY_MODEL, sys, f"Сообщение: {post['text']}", 400, key)
     j = _json(data)
     if not j or not j.get("is_signal"):

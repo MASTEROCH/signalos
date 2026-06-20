@@ -23,7 +23,8 @@ DEFAULT_SOURCES = [
     {"id": "mastodon", "enabled": True, "label": "Mastodon", "instance": "mastodon.social"},
     {"id": "lobsters", "enabled": False, "label": "Lobsters"},
     {"id": "rss", "enabled": True, "label": "Google Alerts / RSS", "feeds": []},
-    {"id": "telegram", "enabled": False, "label": "Telegram", "chats": [], "per_chat": 40},
+    # Telegram как ИСТОЧНИК скана убран: чтение чужих чатов через личную сессию = риск бана/ToS.
+    # Telegram остаётся только как канал ДОСТАВКИ дайджеста (бот @BotFather) — без риска.
 ]
 
 
@@ -65,6 +66,13 @@ def update_project(uid, pid, f):
                 except Exception: pass
             if "auto_improve" in f:
                 p["auto_improve"] = bool(f["auto_improve"])
+            if "resonance" in f and isinstance(f["resonance"], dict):
+                r = f["resonance"]
+                p["resonance"] = {
+                    "ideal": str(r.get("ideal", "")).strip(),
+                    "boost": [x.strip() for x in (r.get("boost") or []) if x and x.strip()][:30],
+                    "penalty": [x.strip() for x in (r.get("penalty") or []) if x and x.strip()][:30],
+                }
             save_config(uid, cfg)
             return p
     return None
@@ -121,9 +129,10 @@ def prefilter(text, projects):
         return False
     for p in projects:
         toks = classifier.keyword_tokens(p.get("keywords", []))
-        if any(classifier._wordin(t, low) for t in toks):
-            if not any(n.lower() in low for n in p.get("negative_keywords", [])):
-                return True
+        boost = [b.lower() for b in (p.get("resonance") or {}).get("boost", [])]
+        match = any(classifier._wordin(t, low) for t in toks) or any(b in low for b in boost)
+        if match and not any(n.lower() in low for n in p.get("negative_keywords", [])):
+            return True
     return False
 
 
@@ -163,6 +172,8 @@ def scan_user(uid):
         if not src.get("enabled"):
             continue
         sid = src["id"]
+        if sid == "telegram":          # личная TG-сессия больше не сканируется (де-риск)
+            continue
         posts = sources.collect(sid, kws, _source_cfg(uid, src, cfg))
         summary["fetched"] += len(posts)
         found = 0

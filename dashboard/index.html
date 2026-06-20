@@ -32,6 +32,8 @@
   ::-webkit-scrollbar-thumb:hover{background:var(--mut2); background-clip:content-box}
   ::-webkit-scrollbar-track{background:transparent}
   .copied-hint{margin-left:auto; font-size:13.5px; color:var(--sig); display:flex; align-items:center; gap:7px; font-weight:600}
+  .spamwarn{margin:8px 0 0; font-size:12.5px; color:var(--hot); display:flex; align-items:center; gap:7px; line-height:1.4}
+  .spamwarn:empty{display:none}
   .card.copied{border-color:var(--sig2); box-shadow:0 0 0 1px var(--sig2), var(--shadow), var(--spec)}
   .card.copied .accent{background:var(--sig)}
   body{
@@ -902,9 +904,9 @@ function renderCards(){
         <div class="meta">
           <span class="tag" style="background:${projColor(s.project)}22; color:${projColor(s.project)}">
             <span class="dot" style="color:${projColor(s.project)}"></span>${projName(s.project)}</span>
-          <div class="strength l${s.strength}">
+          <div class="strength l${s.strength}" title="Резонанс ${s.strength}/5 — насколько человек живой и открытый">
             <div class="bars"><i></i><i></i><i></i><i></i><i></i></div>
-            <small>${s.conf}%</small>
+            <small>резонанс ${s.strength}/5</small>
           </div>
           <span class="ago">${s.ago||''}</span>
         </div>
@@ -920,15 +922,16 @@ function renderCards(){
       <div class="why">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${projColor(s.project)}" stroke-width="2">
           <circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
-        <span><b style="color:var(--ink)">Почему это твой клиент:</b> ${s.why}</span>
+        <span><b style="color:var(--ink)">Почему резонирует:</b> ${s.why}</span>
       </div>
 
       <div class="draft">
         <div class="h" style="justify-content:space-between; text-transform:none; letter-spacing:0">
-          <span><span class="ai">${ico('spark')} Готовый ответ</span> · ${claudeOn?'Claude':'заготовка'} · правь как хочешь</span>
+          <span><span class="ai">${ico('spark')} Готовый ответ</span> · ${claudeOn?'Claude':'заготовка'} · сначала помоги, ссылка между делом</span>
           <span class="regen" onclick="event.stopPropagation();regenerate(${s.id}, this)">${ico('refresh')} Другой вариант</span>
         </div>
-        <textarea id="ta-${s.id}" oninput="autosize(this)">${(s.draft||'').replace(/</g,'&lt;')}</textarea>
+        <textarea id="ta-${s.id}" oninput="autosize(this);checkSpam(${s.id})">${(s.draft||'').replace(/</g,'&lt;')}</textarea>
+        <div class="spamwarn" id="spam-${s.id}"></div>
       </div>
 
       <div class="actions">
@@ -944,7 +947,7 @@ function renderCards(){
       </div>
     </div>`).join('');
 
-  document.querySelectorAll('#cards textarea').forEach(autosize);
+  document.querySelectorAll('#cards textarea').forEach(t=>{ autosize(t); checkSpam(t.id.replace('ta-','')); });
   updateStats();
 }
 
@@ -1030,6 +1033,16 @@ function finishCard(id){
 function skip(id){ copiedIds.delete(id); if(LIVE) fetch('/api/signal/'+id+'/skip',{method:'POST'}).catch(()=>{}); removeCard(id, ()=>toast('Пропущено')); }
 function editDraft(id){ const ta=document.getElementById('ta-'+id); if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length);} }
 function autosize(el){ el.style.height='auto'; el.style.height=Math.max(84,el.scrollHeight)+'px'; }
+const SPAM=['100%','гарантирую','гаранти','успей','только сегодня','скидк','акци ','купи сейчас','лучшая цена','жми','guaranteed','limited time','act now','buy now','best price','huge discount','don\'t miss'];
+function checkSpam(id){
+  const ta=document.getElementById('ta-'+id), w=document.getElementById('spam-'+id);
+  if(!ta||!w) return;
+  const low=ta.value.toLowerCase();
+  const hits=SPAM.filter(s=>low.includes(s));
+  w.innerHTML = hits.length
+    ? `${ico('flame')} Звучит как реклама («${hits.slice(0,2).join('», «')}») — перепиши по-человечески или жми «Другой вариант»`
+    : '';
+}
 
 /* ============ СКАН ============ */
 async function scanNow(){
@@ -1255,10 +1268,9 @@ function renderSettings(){
     <div class="setsub">Вставь данные в поля — всё применится сразу, без перезапуска и терминала.</div>
 
     <div class="setsec">
-      <div class="row"><span class="ttl">${ico('send')} Telegram</span>
-        <span class="statuschip ${conn?'on':'off'}">${conn?'подключён':'не подключён'}</span></div>
-      ${conn ? tgConnectedHTML() : tgLoginHTML(T)}
-      <div class="setmsg ${SET.msgC}" id="tg-msg">${SET.msg}</div>
+      <div class="row"><span class="ttl">${ico('send')} Telegram-дайджест</span>
+        <span class="statuschip off">скоро</span></div>
+      <div class="desc">Утром в Telegram будет падать «🛰 N искр готовы» — открыл, увидел готовые ответы, скопировал. Через бота (@BotFather), безопасно. Чтение чужих чатов через личную сессию убрали — это был риск бана аккаунта.</div>
     </div>
 
     ${SET.auto ? `<div class="setsec">
@@ -1618,6 +1630,7 @@ async function pmEdit(id){
 
 function pmRenderEdit(){
   const p=PM.proj;
+  if(!p.resonance) p.resonance={ideal:'',boost:[],penalty:[]};
   document.getElementById('pmbody').innerHTML=`
     <div class="seth">${esc(p.name)}</div>
     <div class="setsub">Настрой, кого искать и как отвечать.</div>
@@ -1647,6 +1660,21 @@ function pmRenderEdit(){
     <label class="wizlabel">Минимальная «температура» сигнала</label>
     <div class="ddesc">Чем выше — тем меньше шума, но и меньше находок. 3 — баланс.</div>
     <div class="strpills">${[1,2,3,4,5].map(n=>`<div class="strpill ${(p.min_strength||3)===n?'on':''}" onclick="PM.proj.min_strength=${n};pmRenderEdit()">${n}</div>`).join('')}</div>
+
+    <div class="improve-box" style="border-color:var(--cold);background:rgba(91,140,255,.05)">
+      <div class="improve-h" style="color:var(--cold)">◎ Резонанс — будить только на живого человека</div>
+      <div class="improve-d">Радар оценивает не «есть слово», а эмоциональную открытость. Усиление за живые фразы, штраф за сухое/научное/коммерческое. Так «почему я выбираю не тех» → 5/5, а «validity of Big Five в исследовании» → отсеивается.</div>
+      <button class="setbtn sec" style="margin-bottom:13px;font-size:13px;padding:9px 15px" onclick="pmSelfixPreset()">✦ Пресет SELFIX (самопознание)</button>
+      <label class="wizlabel" style="font-size:13.5px">Идеальный момент клиента (подсказка для ИИ)</label>
+      <input value="${esc(p.resonance.ideal||'')}" oninput="PM.proj.resonance.ideal=this.value" placeholder="напр. растерянный человек, задаёт вопрос о себе, ищет понимания">
+      <label class="wizlabel" style="font-size:13.5px;margin-top:12px;color:var(--sig)">Усиливать — живые эмоциональные фразы</label>
+      <div class="chips">${(p.resonance.boost||[]).map((k,i)=>`<span class="chip">${esc(k)} <x onclick="pmRmBoost(${i})">✕</x></span>`).join('')||'<span style="color:var(--mut2);font-size:12.5px">пусто</span>'}</div>
+      <div class="chipadd"><input id="pe-boost" value="${esc(PM.newBoost||'')}" oninput="PM.newBoost=this.value" onkeydown="if(event.key==='Enter')pmAddBoost()" placeholder="напр. почему я"><button class="wbtn" style="padding:13px 18px" onclick="pmAddBoost()">+</button></div>
+      <label class="wizlabel" style="font-size:13.5px;color:var(--bad)">Штрафовать — сухое / научное / коммерческое</label>
+      <div class="chips">${(p.resonance.penalty||[]).map((k,i)=>`<span class="chip" style="border-color:var(--bad);background:rgba(255,107,107,.08)">${esc(k)} <x onclick="pmRmPen(${i})">✕</x></span>`).join('')||'<span style="color:var(--mut2);font-size:12.5px">нет</span>'}</div>
+      <div class="chipadd"><input id="pe-pen" value="${esc(PM.newPen||'')}" oninput="PM.newPen=this.value" onkeydown="if(event.key==='Enter')pmAddPen()" placeholder="напр. validity, мета-анализ, купить"><button class="wbtn" style="padding:13px 18px" onclick="pmAddPen()">+</button></div>
+    </div>
+
     <div class="wizbtns" style="justify-content:space-between">
       <button class="wbtn ghost" onclick="pmList()">← К списку</button>
       <button class="wbtn go" onclick="pmSave()">Сохранить</button>
@@ -1668,12 +1696,24 @@ function pmAddKw(){ const v=(PM.newKw||'').trim(); if(v){ (PM.proj.keywords=PM.p
 function pmRmKw(i){ PM.proj.keywords.splice(i,1); pmRenderEdit(); }
 function pmAddNeg(){ const v=(PM.newNeg||'').trim(); if(v){ (PM.proj.negative_keywords=PM.proj.negative_keywords||[]).push(v); PM.newNeg=''; } pmRenderEdit(); const e=document.getElementById('pe-neg'); if(e)e.focus(); }
 function pmRmNeg(i){ PM.proj.negative_keywords.splice(i,1); pmRenderEdit(); }
+function pmAddBoost(){ const v=(PM.newBoost||'').trim(); if(v){ (PM.proj.resonance.boost=PM.proj.resonance.boost||[]).push(v); PM.newBoost=''; } pmRenderEdit(); const e=document.getElementById('pe-boost'); if(e)e.focus(); }
+function pmRmBoost(i){ PM.proj.resonance.boost.splice(i,1); pmRenderEdit(); }
+function pmAddPen(){ const v=(PM.newPen||'').trim(); if(v){ (PM.proj.resonance.penalty=PM.proj.resonance.penalty||[]).push(v); PM.newPen=''; } pmRenderEdit(); const e=document.getElementById('pe-pen'); if(e)e.focus(); }
+function pmRmPen(i){ PM.proj.resonance.penalty.splice(i,1); pmRenderEdit(); }
+function pmSelfixPreset(){
+  PM.proj.resonance={
+    ideal:'Растерянный живой человек, который задаёт вопрос О СЕБЕ, выражает боль или ищет понимания себя/других. НЕ исследователь, НЕ покупатель, не сухая теория.',
+    boost:['почему я','выбираю не тех','не понимаю себя','что со мной не так','устал от себя','не могу понять себя','кто я на самом деле','почему так со мной','постоянно одно и то же','не разберусь в себе','why do i always','can\'t understand myself','what\'s wrong with me'],
+    penalty:['валидность','validity','reliability','мета-анализ','meta-analysis','research','научн','scientific','коэффициент','купить','цена','сколько стоит','discount','скидка']
+  };
+  pmRenderEdit(); toast('Пресет SELFIX применён — сохрани проект');
+}
 
 async function pmSave(){
   const p=PM.proj;
   try{
     await api('/api/project/'+p.id,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:p.name,link:p.link,one_liner:p.one_liner,tone:p.tone,keywords:p.keywords,negative_keywords:p.negative_keywords,min_strength:p.min_strength,auto_improve:p.auto_improve})});
+      body:JSON.stringify({name:p.name,link:p.link,one_liner:p.one_liner,tone:p.tone,keywords:p.keywords,negative_keywords:p.negative_keywords,min_strength:p.min_strength,auto_improve:p.auto_improve,resonance:p.resonance})});
     toast('Проект сохранён');
     try{ PROJECTS=await api('/api/projects'); renderProjects(); }catch(e){}
     pmList();
