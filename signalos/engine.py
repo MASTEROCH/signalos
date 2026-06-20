@@ -2,8 +2,8 @@
 engine.py — оркестратор сканирования, мультитенант.
 Каждый пользователь — свой конфиг (проекты + источники + ключ) в БД, свои сигналы.
 """
-import os
-from . import db, classifier, sources
+import os, time
+from . import db, classifier, sources, tg_bot
 
 # Платформенный ИИ-ключ (для пользователей без своего ключа — за токены)
 PLATFORM_KEY = os.environ.get("SIGNALOS_PLATFORM_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
@@ -218,6 +218,96 @@ def improve_project(uid, pid):
         return {"ok": True, "keywords": proj["keywords"], "note": res.get("note", ""),
                 "charged": (COST_IMPROVE if platform else 0)}
     return {"error": "ИИ не вернул улучшения — попробуй ещё раз"}
+
+
+# ---------- утренний дайджест (лицо продукта) ----------
+
+def set_digest(uid, d):
+    """Сохраняет настройки дайджест-бота. d: bot_token, bot_username, chat_id, chat_name,
+    hour, tz_offset, min_strength, enabled."""
+    cfg = get_config(uid)
+    dg = cfg.setdefault("digest", {})
+    for k in ("bot_token", "bot_username", "chat_id", "chat_name"):
+        if d.get(k) is not None:
+            dg[k] = str(d[k]).strip()
+    if "enabled" in d:
+        dg["enabled"] = bool(d["enabled"])
+    if "hour" in d:
+        try: dg["hour"] = max(0, min(23, int(d["hour"])))
+        except Exception: pass
+    if "tz_offset" in d:
+        try: dg["tz_offset"] = max(-12, min(14, int(d["tz_offset"])))
+        except Exception: pass
+    if "min_strength" in d:
+        try: dg["min_strength"] = max(1, min(5, int(d["min_strength"])))
+        except Exception: pass
+    save_config(uid, cfg)
+    return dg
+
+
+def _proj_name(cfg, pid):
+    p = next((x for x in cfg.get("projects", []) if x["id"] == pid), None)
+    return p["name"] if p else pid
+
+
+def render_digest(cfg, rows):
+    e = tg_bot.esc
+    n = len(rows)
+    head = (f"🛰 <b>{n} {_plural(n, 'искра','искры','искр')} готов{_plural(n,'а','ы','о')}</b> — живые люди, которым "
+            f"ты прямо сейчас можешь помочь.\n")
+    if not rows:
+        return ("🛰 <b>Пока тихо.</b>\nРадар работает, но людей с настоящим запросом за ночь не нашлось — "
+                "это нормально: лучше тишина, чем спам по случайным упоминаниям. Загляну снова завтра утром.")
+    blocks = [head]
+    for s in rows:
+        stars = "🔥" if s.get("temp") == "hot" else "✨"
+        proj = e(_proj_name(cfg, s.get("project", "")))
+        excerpt = e((s.get("text") or "").strip().replace("\n", " "))[:200]
+        why = e((s.get("why") or "").strip())[:160]
+        b = [f"\n{stars} <b>{proj}</b> · резонанс {s.get('strength',0)}/5 · {e(s.get('source_label',''))}",
+             f"«{excerpt}»"]
+        if why:
+            b.append(f"<i>{why}</i>")
+        if s.get("draft"):
+            b.append("💬 готовый ответ (тапни — скопируется):")
+            b.append(f"<code>{e(s['draft'])}</code>")
+        if s.get("url"):
+            b.append(f"🔗 <a href=\"{e(s['url'])}\">открыть оригинал и ответить</a>")
+        blocks.append("\n".join(b))
+    blocks.append("\n— SignalOS · отвечай как человек, помоги первым, ссылку роняй один раз.")
+    return "\n".join(blocks)
+
+
+def _plural(n, one, few, many):
+    n = abs(n) % 100
+    if 11 <= n <= 14: return many
+    d = n % 10
+    if d == 1: return one
+    if 2 <= d <= 4: return few
+    return many
+
+
+def send_digest(uid, force=False):
+    cfg = get_config(uid)
+    dg = cfg.get("digest") or {}
+    token, chat = dg.get("bot_token"), dg.get("chat_id")
+    if not (token and chat):
+        return {"error": "Дайджест-бот не настроен: впиши токен и chat_id", "need_setup": True}
+    since = 0 if force else (dg.get("last_sent") or 0)
+    min_s = int(dg.get("min_strength", 4))
+    rows = db.digest_signals(uid, since, min_s, 6)
+    if not rows and not force:
+        dg["last_sent"] = time.time()       # двигаем курсор, тишину при автозапуске не шлём
+        cfg["digest"] = dg; save_config(uid, cfg)
+        return {"ok": True, "count": 0}
+    text = render_digest(cfg, rows)
+    ok = tg_bot.send(token, str(chat), text)
+    if ok:
+        dg["last_sent"] = time.time()
+        cfg["digest"] = dg
+        save_config(uid, cfg)
+    return {"ok": ok, "count": len(rows),
+            "error": None if ok else "Telegram не принял сообщение — проверь токен и что ты нажал Start у бота"}
 
 
 def regenerate(uid, sid):

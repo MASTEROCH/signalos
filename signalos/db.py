@@ -438,6 +438,29 @@ def recent_signals(uid, project, limit=40):
     return [dict(r) for r in rows]
 
 
+def digest_signals(uid, since, min_strength, limit=6):
+    """Свежие искры для утреннего дайджеста: в очереди, найдены после `since`, резонанс>=min."""
+    if _USE_PG:
+        conn = _pg()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT id, project, source_label, text, url, draft, strength, why, temp, created
+            FROM signals WHERE user_id=%s AND status='queue' AND strength>=%s AND created>%s
+            ORDER BY strength DESC, created DESC LIMIT %s""",
+            (uid, min_strength, since, limit))
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+        return [dict(r) for r in rows]
+    else:
+        with _c() as c:
+            rows = c.execute(
+                """SELECT id, project, source_label, text, url, draft, strength, why, temp, created
+                FROM signals WHERE user_id=? AND status='queue' AND strength>=? AND created>?
+                ORDER BY strength DESC, created DESC LIMIT ?""",
+                (uid, min_strength, since, limit)).fetchall()
+            return [dict(r) for r in rows]
+
+
 def export_rows(uid):
     if _USE_PG:
         conn = _pg()

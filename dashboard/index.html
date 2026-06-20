@@ -392,6 +392,12 @@
     color:var(--sig); font-size:11.5px; font-weight:700; margin-right:8px; font-family:var(--mono)}
   .tgstep{font-size:13.5px; color:var(--mut); line-height:1.7; margin-bottom:8px}
   .tgstep a{color:var(--sig); text-decoration:none}
+  .dg-ok{font-size:13px; color:var(--sig); margin:-2px 0 12px; padding-left:2px}
+  .dg-ok b{color:var(--ink)}
+  .dg-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:6px 0 4px}
+  .dg-f{display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--mut2)}
+  .dg-f select, .dg-f input{margin:0; width:100%}
+  @media(max-width:520px){ .dg-grid{grid-template-columns:1fr} }
 
   /* каналы со СВИТЧЕРАМИ (правильный iOS-капсульный toggle) */
   .chanrow{display:flex; align-items:center; gap:11px; padding:11px 4px; border-bottom:1px solid var(--line)}
@@ -1253,6 +1259,9 @@ async function openSettings(){
     SET.auto = await api('/api/automation');
     SET.tg.chats = (SET.status.telegram.chats||[]).join(', ');
     SET.tgState = SET.status.telegram.connected ? 'connected' : 'idle';
+    const d = SET.status.digest||{};
+    SET.dg = {token:'', hour:d.hour??9, tz_offset:d.tz_offset??4, min_strength:d.min_strength??4,
+              enabled:!!d.enabled, msg:'', msgC:''};
     SET.msg=''; SET.msgC=''; SET.cmsg=''; SET.cmsgC='';
     renderSettings();
   }catch(e){ document.getElementById('setbody').innerHTML = '<div class="seth">Настройки</div><p style="color:var(--mut)">Не удалось загрузить.</p>'; }
@@ -1268,9 +1277,10 @@ function renderSettings(){
     <div class="setsub">Вставь данные в поля — всё применится сразу, без перезапуска и терминала.</div>
 
     <div class="setsec">
-      <div class="row"><span class="ttl">${ico('send')} Telegram-дайджест</span>
-        <span class="statuschip off">скоро</span></div>
-      <div class="desc">Утром в Telegram будет падать «🛰 N искр готовы» — открыл, увидел готовые ответы, скопировал. Через бота (@BotFather), безопасно. Чтение чужих чатов через личную сессию убрали — это был риск бана аккаунта.</div>
+      <div class="row"><span class="ttl">${ico('send')} Утренний дайджест в Telegram</span>
+        ${st.digest&&st.digest.configured ? `<span class="statuschip ${st.digest.enabled?'on':'off'}">${st.digest.enabled?'включён':'на паузе'}</span>` : `<span class="statuschip off">настроить</span>`}</div>
+      <div class="desc">Лицо продукта: утром в личку падает «🛰 N искр готовы» — открыл, тапнул по готовому ответу (скопировался), ответил человеку. Через своего бота (@BotFather), безопасно — без чтения чужих чатов и риска бана.</div>
+      ${digestHTML(st.digest||{})}
     </div>
 
     ${SET.auto ? `<div class="setsec">
@@ -1324,6 +1334,71 @@ async function upgrade(plan){
     const me=await api('/api/auth/me'); ME=me.user; renderUser();
     SET.billing=await api('/api/billing'); renderSettings();
   }catch(e){ toast('Ошибка смены тарифа'); }
+}
+
+function digestHTML(d){
+  const D = SET.dg;
+  const botOk = !!d.bot_username, chatOk = !!d.chat_name;
+  const hours = Array.from({length:24},(_,h)=>`<option value="${h}" ${D.hour===h?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('');
+  return `
+    <div class="tgstep"><span class="step-n">1</span> Открой <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> → <b>/newbot</b> → придумай имя → он пришлёт <b>токен</b></div>
+    <div class="setrow2">
+      <input id="dg-token" placeholder="${botOk?('Подключён: @'+d.bot_username+' — вставь новый чтобы сменить'):'12345:ABC-токен от BotFather'}" value="${esc(D.token)}" oninput="SET.dg.token=this.value">
+      <button class="setbtn" style="margin:0;white-space:nowrap" onclick="dgVerify()">Проверить</button>
+    </div>
+    ${botOk?`<div class="dg-ok">✓ Бот <b>@${esc(d.bot_username)}</b> на связи</div>`:''}
+
+    <div class="tgstep"><span class="step-n">2</span> Открой ${botOk?`<a href="https://t.me/${esc(d.bot_username)}" target="_blank" rel="noopener">@${esc(d.bot_username)}</a>`:'своего бота'} в Telegram → нажми <b>Start</b> (или напиши /start) → вернись и нажми кнопку</div>
+    <button class="setbtn sec" onclick="dgDetect()" ${botOk?'':'disabled'}>Определить мой Telegram</button>
+    ${chatOk?`<div class="dg-ok">✓ Доставлять в <b>${esc(d.chat_name)}</b></div>`:''}
+
+    <div class="tgstep"><span class="step-n">3</span> Когда присылать и какой порог резонанса</div>
+    <div class="dg-grid">
+      <label class="dg-f"><span>Час доставки</span><select onchange="SET.dg.hour=+this.value;dgSave()">${hours}</select></label>
+      <label class="dg-f"><span>Часовой пояс UTC</span><input type="number" min="-12" max="14" value="${D.tz_offset}" onchange="SET.dg.tz_offset=+this.value;dgSave()"></label>
+      <label class="dg-f"><span>Будить от резонанса</span><select onchange="SET.dg.min_strength=+this.value;dgSave()">${[3,4,5].map(v=>`<option value="${v}" ${D.min_strength===v?'selected':''}>${v}/5 и выше</option>`).join('')}</select></label>
+    </div>
+    <div class="autorow"><div class="al">Включить утренний дайджест<small>тихо, если живых запросов нет — лучше тишина, чем спам</small></div>
+      <label class="switch"><input type="checkbox" ${D.enabled?'checked':''} ${(botOk&&chatOk)?'':'disabled'} onchange="SET.dg.enabled=this.checked;dgSave(true)"><span class="track"><span class="knob"></span></span></label></div>
+    ${(botOk&&chatOk)?`<button class="setbtn" onclick="dgTest()">Прислать пробный дайджест сейчас</button>`:''}
+    <div class="setmsg ${D.msgC}" id="dg-msg">${D.msg||''}</div>`;
+}
+
+async function dgVerify(){
+  const t=(SET.dg.token||'').trim();
+  if(t.length<20||!t.includes(':')){ SET.dg.msg='Вставь токен целиком (формат 12345:ABC…)'; SET.dg.msgC='err'; renderSettings(); return; }
+  SET.dg.msg='Проверяю бота…'; SET.dg.msgC=''; renderSettings();
+  try{
+    const r=await api('/api/digest/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bot_token:t})});
+    if(r.ok){ SET.dg.token=''; SET.dg.msg='✓ Бот @'+r.username+' подключён. Теперь шаг 2.'; SET.dg.msgC='ok'; SET.status=await api('/api/settings'); }
+    else { SET.dg.msg=r.error||'Не удалось проверить'; SET.dg.msgC='err'; }
+  }catch(e){ SET.dg.msg='Ошибка проверки'; SET.dg.msgC='err'; }
+  renderSettings();
+}
+async function dgDetect(){
+  SET.dg.msg='Ищу твоё сообщение боту…'; SET.dg.msgC=''; renderSettings();
+  try{
+    const r=await api('/api/digest/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    if(r.ok){ SET.dg.msg='✓ Нашёл: '+(r.name||r.chat_id)+'. Включай тумблер ниже.'; SET.dg.msgC='ok'; SET.status=await api('/api/settings'); }
+    else { SET.dg.msg=r.error||'Не нашёл сообщений'; SET.dg.msgC='err'; }
+  }catch(e){ SET.dg.msg='Ошибка'; SET.dg.msgC='err'; }
+  renderSettings();
+}
+async function dgSave(reRender){
+  try{
+    await api('/api/digest/save',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({hour:SET.dg.hour,tz_offset:SET.dg.tz_offset,min_strength:SET.dg.min_strength,enabled:SET.dg.enabled})});
+    if(reRender){ SET.status=await api('/api/settings'); SET.dg.msg=SET.dg.enabled?'✓ Дайджест включён — жди утром':'Дайджест на паузе'; SET.dg.msgC='ok'; renderSettings(); }
+  }catch(e){}
+}
+async function dgTest(){
+  SET.dg.msg='Отправляю пробный…'; SET.dg.msgC=''; renderSettings();
+  try{
+    const r=await api('/api/digest/test',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    if(r.ok){ SET.dg.msg=r.count?('✓ Отправил дайджест с '+r.count+' искрами — проверь Telegram'):'✓ Отправил (живых искр пока нет — пришёл «пока тихо»). Бот работает!'; SET.dg.msgC='ok'; }
+    else { SET.dg.msg=r.error||'Не отправилось'; SET.dg.msgC='err'; }
+  }catch(e){ SET.dg.msg='Ошибка отправки'; SET.dg.msgC='err'; }
+  renderSettings();
 }
 
 function tgLoginHTML(T){

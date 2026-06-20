@@ -241,6 +241,14 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/telegram/sign_in":
             b = self._body()
             return self._send(200, settings.sign_in(uid, b.get("code"), b.get("password")))
+        if p == "/api/digest/verify":
+            return self._send(200, settings.verify_digest_bot(uid, self._body().get("bot_token")))
+        if p == "/api/digest/detect":
+            return self._send(200, settings.detect_digest_chat(uid))
+        if p == "/api/digest/save":
+            return self._send(200, settings.save_digest(uid, self._body()))
+        if p == "/api/digest/test":
+            return self._send(200, settings.test_digest(uid))
         if p == "/api/billing/upgrade":
             b = self._body(); plan = b.get("plan", "free")
             if plan in PLANS:
@@ -278,16 +286,54 @@ def _ago(ts):
 
 
 _last_scan = {}
+_digest_fired = {}   # uid -> местный день (год, yday), когда уже стрельнули — защита от дубля
+
+
+def _local_day(now, tz):
+    lt = time.gmtime(now + tz * 3600)
+    return (lt.tm_year, lt.tm_yday)
+
+
+def _digest_due(uid, cfg, now):
+    """Дайджест-бот настроен, включён, наступил его час по местному времени, и сегодня ещё не слали."""
+    dg = cfg.get("digest") or {}
+    if not (dg.get("enabled") and dg.get("bot_token") and dg.get("chat_id")):
+        return False
+    tz = int(dg.get("tz_offset", 4)); hour = int(dg.get("hour", 9))
+    today = _local_day(now, tz)
+    if _digest_fired.get(uid) == today:                 # уже стреляли сегодня (in-memory guard)
+        return False
+    last = dg.get("last_sent") or 0
+    if last and _local_day(last, tz) == today:          # переживает рестарт сервера
+        return False
+    return time.gmtime(now + tz * 3600).tm_hour >= hour
+
+
+def _digest_job(uid):
+    """Свежий скан → собрать и доставить дайджест в Telegram."""
+    try:
+        scan(uid)
+    except Exception:
+        pass
+    try:
+        engine.send_digest(uid)
+    except Exception:
+        pass
 
 
 def auto_scan_loop():
-    """Тикает раз в минуту; сканирует юзера, если включён автопилот и прошёл его интервал."""
+    """Тикает раз в минуту; шлёт утренний дайджест и сканирует по автопилоту."""
     while True:
         time.sleep(60)
         now = time.time()
         for uid in db.all_user_ids():
             if uid in _scanning or not is_configured(uid):
                 continue
+            cfg0 = engine.get_config(uid)
+            if _digest_due(uid, cfg0, now):            # «лицо продукта» — не зависит от тарифа
+                tz = int((cfg0.get("digest") or {}).get("tz_offset", 4))
+                _digest_fired[uid] = _local_day(now, tz)   # метим до запуска — защита от дубля
+                threading.Thread(target=lambda x=uid: _digest_job(x), daemon=True).start()
             u = db.get_user(uid)
             if not PLANS.get(u["plan"], PLANS["free"])["auto"]:   # автопоиск — только на подписке
                 continue

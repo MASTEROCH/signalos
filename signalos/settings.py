@@ -1,5 +1,5 @@
 """settings.py — настройки пользователя (мультитенант): Anthropic-ключ, Telegram, источники."""
-from . import engine, classifier, tg_session
+from . import engine, classifier, tg_session, tg_bot
 
 
 def _session(uid):
@@ -13,6 +13,7 @@ def mask(s):
 def status(uid):
     cfg = engine.get_config(uid)
     tg = cfg.get("tg", {})
+    dg = cfg.get("digest", {})
     return {
         "claude": bool(cfg.get("anthropic_key")),
         "claude_masked": mask(cfg.get("anthropic_key", "")),
@@ -21,7 +22,44 @@ def status(uid):
             "connected": tg_session.session_exists(_session(uid)),
             "chats": tg.get("chats", []),
         },
+        "digest": {
+            "configured": bool(dg.get("bot_token") and dg.get("chat_id")),
+            "enabled": bool(dg.get("enabled")),
+            "bot_username": dg.get("bot_username", ""),
+            "chat_name": dg.get("chat_name", ""),
+            "token_masked": mask(dg.get("bot_token", "")),
+            "hour": dg.get("hour", 9),
+            "tz_offset": dg.get("tz_offset", 4),
+            "min_strength": dg.get("min_strength", 4),
+        },
     }
+
+
+def verify_digest_bot(uid, token):
+    r = tg_bot.verify((token or "").strip())
+    if r.get("ok"):
+        engine.set_digest(uid, {"bot_token": token.strip(), "bot_username": r.get("username", "")})
+    return r
+
+
+def detect_digest_chat(uid):
+    cfg = engine.get_config(uid); dg = cfg.get("digest", {})
+    if not dg.get("bot_token"):
+        return {"ok": False, "error": "Сначала впиши и проверь токен бота"}
+    r = tg_bot.detect_chat(dg["bot_token"])
+    if r.get("ok"):
+        engine.set_digest(uid, {"chat_id": r["chat_id"], "chat_name": r.get("name", "")})
+    return r
+
+
+def save_digest(uid, d):
+    dg = engine.set_digest(uid, d or {})
+    return {"ok": True, "configured": bool(dg.get("bot_token") and dg.get("chat_id")),
+            "enabled": bool(dg.get("enabled"))}
+
+
+def test_digest(uid):
+    return engine.send_digest(uid, force=True)
 
 
 def save_claude(uid, key):
