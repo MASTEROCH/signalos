@@ -25,6 +25,7 @@ DEFAULT_SOURCES = [
     {"id": "mastodon", "enabled": True, "label": "Mastodon", "instance": "mastodon.social"},
     {"id": "lobsters", "enabled": False, "label": "Lobsters"},
     {"id": "rss", "enabled": True, "label": "Google Alerts / RSS", "feeds": []},
+    {"id": "vk", "enabled": True, "label": "ВКонтакте", "max_keywords": 5, "token": ""},   # RU-аудитория; нужен токен
     # Telegram как ИСТОЧНИК скана убран: чтение чужих чатов через личную сессию = риск бана/ToS.
     # Telegram остаётся только как канал ДОСТАВКИ дайджеста (бот @BotFather) — без риска.
 ]

@@ -1517,7 +1517,9 @@ async function toggleChannel(id, on){
 /* каналы: строка + онбординг подключения API */
 function chanRow(s, conn){
   const open = SET.openHelp===s.id;
-  const sub = s.id==='telegram' ? (conn?'подключён':'вход в разделе Telegram выше') : 'без ключей, бесплатно';
+  const sub = s.id==='telegram' ? (conn?'подключён':'вход в разделе Telegram выше')
+            : s.id==='vk' ? 'нужен бесплатный токен (RU-аудитория)'
+            : 'без ключей, бесплатно';
   return `<div class="chanrow">
       <span class="ci">${srcIcon(s.id)}</span>
       <div><b>${s.label}</b><small>${sub}</small></div>
@@ -1536,6 +1538,15 @@ function chanHelp(id){
       <input id="ck-reddit-secret" placeholder="secret" style="margin-bottom:8px">
       <button class="setbtn sec" style="padding:9px 16px;font-size:13px" onclick="saveRedditKeys()">Сохранить ключи Reddit</button>
     </div>`;
+  if(id==='vk') return `Лучший канал для русскоязычной/батумской аудитории. Нужен бесплатный токен (1 раз):
+    <ol><li>Открой <a href="https://vk.com/apps?act=manage" target="_blank" rel="noopener">vk.com/apps?act=manage</a> → «Создать» → тип <b>Standalone</b> (приложение)</li>
+    <li>Зайди в созданное приложение → <b>Настройки</b> → скопируй <b>ID приложения</b></li>
+    <li>Получи токен: вставь свой ID в эту ссылку и открой её —<br><span style="font-family:var(--mono);font-size:11.5px;color:var(--sig)">https://oauth.vk.com/authorize?client_id=<b>ВАШ_ID</b>&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,offline&response_type=token&v=5.131</span></li>
+    <li>Разреши доступ → в адресной строке появится <b>access_token=...</b> — скопируй значение между <b>access_token=</b> и <b>&expires</b></li><li>Вставь токен сюда и сохрани</li></ol>
+    <div style="margin-top:8px">
+      <input id="ck-vk-token" placeholder="access_token из VK" style="margin-bottom:8px">
+      <button class="setbtn sec" style="padding:9px 16px;font-size:13px" onclick="saveVkToken()">Сохранить токен VK</button>
+    </div>`;
   if(id==='rss') return `🔑 Главная хитрость для автопилота: заведи бесплатный <a href="https://www.google.com/alerts" target="_blank" rel="noopener">Google Alerts</a> на свои фразы (любой язык) → скопируй RSS-ленту → радар ловит упоминания со всего веба. Добавление лент — скажи мне, добавлю в твой проект.`;
   if(id==='telegram') return `Вход — в разделе «Telegram» выше: api_id/api_hash с <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a> + код в окно. После входа укажи чаты — и канал заработает на автопилоте.`;
   return `Работает сразу, без ключа. Ничего настраивать не нужно — просто держи включённым.`;
@@ -1544,6 +1555,12 @@ async function saveRedditKeys(){
   const ci=(document.getElementById('ck-reddit-id')||{}).value||'';
   const cs=(document.getElementById('ck-reddit-secret')||{}).value||'';
   try{ await api('/api/source/reddit/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:ci.trim(),client_secret:cs.trim()})}); toast('Ключи Reddit сохранены'); }
+  catch(e){ toast('Ошибка'); }
+}
+async function saveVkToken(){
+  const t=(document.getElementById('ck-vk-token')||{}).value||'';
+  if(t.trim().length<20){ toast('Вставь токен целиком'); return; }
+  try{ await api('/api/source/vk/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t.trim()})}); toast('✓ Токен VK сохранён — канал готов'); }
   catch(e){ toast('Ошибка'); }
 }
 async function saveAuto(k, v){
@@ -1871,14 +1888,14 @@ const PRESETS = {
 
 // рекомендованные каналы под аудиторию пресета (эмоц. продукты — соц-площадки; B2B-dev — GitHub/SO)
 const PRESET_CHANNELS = {
-  selfix:['reddit','bluesky','mastodon','lemmy','rss'],
-  anzh:['reddit','bluesky','mastodon','rss'],
-  rochaudit:['hackernews','reddit','lemmy','bluesky','mastodon','rss'],
+  selfix:['reddit','vk','bluesky','mastodon','lemmy','rss'],
+  anzh:['vk','reddit','bluesky','mastodon','rss'],
+  rochaudit:['hackernews','reddit','vk','lemmy','bluesky','mastodon','rss'],
   apphub:['github','hackernews','lemmy','stackexchange','reddit'],
-  crookedcook:['reddit','mastodon','rss'],
-  beautybot:['reddit','mastodon','rss'],
-  cityhub:['reddit','bluesky','mastodon','rss'],
-  datum:['reddit','bluesky','mastodon','lemmy'],
+  crookedcook:['vk','reddit','mastodon','rss'],
+  beautybot:['vk','reddit','mastodon','rss'],
+  cityhub:['vk','reddit','bluesky','mastodon','rss'],
+  datum:['vk','reddit','bluesky','mastodon','lemmy'],
 };
 
 // тематические ключи (топикальность) — пост должен быть ПРО продукт, не только эмоциональным

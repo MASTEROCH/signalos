@@ -64,6 +64,8 @@ def collect(source_id, keywords, cfg):
             from . import mastodon; return mastodon.search(keywords, cfg)
         if source_id == "lobsters":
             from . import lobsters; return lobsters.search(keywords, cfg)
+        if source_id == "vk":
+            from . import vk; return vk.search(keywords, cfg)
         if source_id == "rss":
             from . import rss; return rss.fetch(cfg)
         if source_id == "telegram":
