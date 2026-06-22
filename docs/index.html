@@ -502,6 +502,11 @@
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235b8cff' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     background-repeat:no-repeat; background-position:right 13px center; padding-right:34px}
   .preset-pick option{background:#10131a; color:var(--ink); font-weight:500}
+  .chanpick{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px}
+  .chanchip{font-size:12.5px; padding:7px 12px; border-radius:99px; cursor:pointer; user-select:none;
+    border:1px solid var(--line2); color:var(--mut); background:rgba(120,160,190,.05); transition:.15s var(--ease)}
+  .chanchip:hover{border-color:var(--mut2); color:var(--ink)}
+  .chanchip.on{border-color:var(--sig2); color:var(--sig); background:rgba(70,243,196,.1); font-weight:600}
   .improve-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
 
   /* перегенерация на карточке */
@@ -1309,6 +1314,9 @@ function renderSettings(){
       <div class="row"><span class="ttl">${ico('radar')} Автопилот</span>
         ${isPro ? `<span class="statuschip ${SET.auto.auto_scan!==false?'on':'off'}">${SET.auto.auto_scan!==false?'включён':'выключен'}</span>` : `<span class="statuschip off">только в Pro</span>`}</div>
       <div class="desc">Радар сам сканирует по расписанию и копит клиентов в очередь — тебе остаётся одобрять.${isPro?'':' Автопоиск 24/7 — на подписке Pro. На Free сканируй вручную кнопкой «Найти клиентов».'}</div>
+      <div class="autorow"><div class="al">Свежесть находок<small>не показывать посты старше — суть радара ловить свежак</small></div>
+        <select style="width:auto;margin:0;padding:9px 12px" onchange="saveAuto('fresh_days', this.value)">
+          ${[3,7,14,30].map(d=>`<option value="${d}" ${(SET.auto.fresh_days||14)===d?'selected':''}>${d} дн.</option>`).join('')}</select></div>
       ${isPro ? `
         <div class="autorow"><div class="al">Авто-поиск<small>искать в фоне, без твоего участия</small></div>
           <label class="switch"><input type="checkbox" ${SET.auto.auto_scan!==false?'checked':''} onchange="saveAuto('auto_scan', this.checked)"><span class="track"><span class="knob"></span></span></label></div>
@@ -1728,6 +1736,7 @@ async function pmEdit(id){
 function pmRenderEdit(){
   const p=PM.proj;
   if(!p.resonance) p.resonance={ideal:'',boost:[],penalty:[]};
+  if(!Array.isArray(p.channels)) p.channels=[];
   document.getElementById('pmbody').innerHTML=`
     <div class="seth">${esc(p.name)}</div>
     <div class="setsub">Настрой, кого искать и как отвечать.</div>
@@ -1757,6 +1766,12 @@ function pmRenderEdit(){
     <label class="wizlabel">Минимальная «температура» сигнала</label>
     <div class="ddesc">Чем выше — тем меньше шума, но и меньше находок. 3 — баланс.</div>
     <div class="strpills">${[1,2,3,4,5].map(n=>`<div class="strpill ${(p.min_strength||3)===n?'on':''}" onclick="PM.proj.min_strength=${n};pmRenderEdit()">${n}</div>`).join('')}</div>
+
+    <div class="improve-box" style="border-color:var(--line2);background:rgba(120,160,190,.04)">
+      <div class="improve-h" style="color:var(--ink)">${ico('rss')} Где искать этот продукт</div>
+      <div class="improve-d">Каналы под аудиторию. Эмоциональные продукты → Reddit / Bluesky / Mastodon. B2B-разработка → GitHub / Stack Exchange. Так радар не тащит код-шум в личные продукты. <b style="color:var(--mut)">Пусто = искать везде.</b></div>
+      <div class="chanpick">${(SOURCES||[]).filter(s=>s.id!=='telegram').map(s=>{const on=pmChanOn(s.id);return `<span class="chanchip ${on?'on':''}" onclick="pmToggleChannel('${s.id}')">${on?'✓ ':''}${esc(s.label)}</span>`;}).join('')||'<span style="color:var(--mut2);font-size:12.5px">каналы загрузятся после входа</span>'}</div>
+    </div>
 
     <div class="improve-box" style="border-color:var(--cold);background:rgba(91,140,255,.05)">
       <div class="improve-h" style="color:var(--cold)">◎ Резонанс — будить только на живого человека</div>
@@ -1796,6 +1811,14 @@ function pmAddKw(){ const v=(PM.newKw||'').trim(); if(v){ (PM.proj.keywords=PM.p
 function pmRmKw(i){ PM.proj.keywords.splice(i,1); pmRenderEdit(); }
 function pmAddNeg(){ const v=(PM.newNeg||'').trim(); if(v){ (PM.proj.negative_keywords=PM.proj.negative_keywords||[]).push(v); PM.newNeg=''; } pmRenderEdit(); const e=document.getElementById('pe-neg'); if(e)e.focus(); }
 function pmRmNeg(i){ PM.proj.negative_keywords.splice(i,1); pmRenderEdit(); }
+function pmChanEffective(){ const all=(SOURCES||[]).filter(s=>s.id!=='telegram').map(s=>s.id); return (PM.proj.channels&&PM.proj.channels.length)?PM.proj.channels:all; }
+function pmChanOn(sid){ return pmChanEffective().includes(sid); }
+function pmToggleChannel(sid){
+  const eff=new Set(pmChanEffective());
+  if(eff.has(sid)) eff.delete(sid); else eff.add(sid);
+  PM.proj.channels=[...eff];      // пусто = все (бэкенд так и трактует)
+  pmRenderEdit();
+}
 function pmAddBoost(){ const v=(PM.newBoost||'').trim(); if(v){ (PM.proj.resonance.boost=PM.proj.resonance.boost||[]).push(v); PM.newBoost=''; } pmRenderEdit(); const e=document.getElementById('pe-boost'); if(e)e.focus(); }
 function pmRmBoost(i){ PM.proj.resonance.boost.splice(i,1); pmRenderEdit(); }
 function pmAddPen(){ const v=(PM.newPen||'').trim(); if(v){ (PM.proj.resonance.penalty=PM.proj.resonance.penalty||[]).push(v); PM.newPen=''; } pmRenderEdit(); const e=document.getElementById('pe-pen'); if(e)e.focus(); }
@@ -1846,19 +1869,32 @@ const PRESETS = {
     penalty:['как сделать игру','разработка игры','вакансия','купить аккаунт','чит','накрутка'] } },
 };
 
+// рекомендованные каналы под аудиторию пресета (эмоц. продукты — соц-площадки; B2B-dev — GitHub/SO)
+const PRESET_CHANNELS = {
+  selfix:['reddit','bluesky','mastodon','lemmy','rss'],
+  anzh:['reddit','bluesky','mastodon','rss'],
+  rochaudit:['hackernews','reddit','bluesky','mastodon','rss'],
+  apphub:['github','stackexchange','hackernews','reddit'],
+  crookedcook:['reddit','mastodon','rss'],
+  beautybot:['reddit','mastodon','rss'],
+  cityhub:['reddit','bluesky','mastodon','rss'],
+  datum:['reddit','bluesky','mastodon','lemmy'],
+};
+
 function pmApplyPreset(key){
   const p = PRESETS[key];
   if(!p) return;
   PM.proj.resonance = { ideal:p.resonance.ideal, boost:[...p.resonance.boost], penalty:[...p.resonance.penalty] };
+  if(PRESET_CHANNELS[key]) PM.proj.channels = [...PRESET_CHANNELS[key]];
   pmRenderEdit();
-  toast('✦ Пресет «'+p.label+'» применён — проверь и сохрани');
+  toast('✦ Пресет «'+p.label+'» применён (резонанс + каналы) — проверь и сохрани');
 }
 
 async function pmSave(){
   const p=PM.proj;
   try{
     await api('/api/project/'+p.id,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:p.name,link:p.link,one_liner:p.one_liner,tone:p.tone,keywords:p.keywords,negative_keywords:p.negative_keywords,min_strength:p.min_strength,auto_improve:p.auto_improve,resonance:p.resonance})});
+      body:JSON.stringify({name:p.name,link:p.link,one_liner:p.one_liner,tone:p.tone,keywords:p.keywords,negative_keywords:p.negative_keywords,min_strength:p.min_strength,auto_improve:p.auto_improve,resonance:p.resonance,channels:p.channels})});
     toast('Проект сохранён');
     try{ PROJECTS=await api('/api/projects'); renderProjects(); }catch(e){}
     pmList();

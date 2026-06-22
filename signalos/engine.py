@@ -12,6 +12,7 @@ COST_REPLY = 1       # токенов за ИИ-ответ на найденно
 COST_REGEN = 2       # за перегенерацию ответа
 COST_SUGGEST = 5     # за умный подбор фраз в мастере
 COST_IMPROVE = 5     # за ИИ-улучшение поисковой выдачи проекта
+FRESH_DAYS = 14      # свежесть по умолчанию: ловим только посты не старше N дней
 
 DEFAULT_SOURCES = [
     {"id": "hackernews", "enabled": True, "label": "HackerNews", "max_keywords": 6},
@@ -67,6 +68,9 @@ def update_project(uid, pid, f):
                 except Exception: pass
             if "auto_improve" in f:
                 p["auto_improve"] = bool(f["auto_improve"])
+            if "channels" in f:
+                valid = {s["id"] for s in DEFAULT_SOURCES}
+                p["channels"] = [c for c in (f["channels"] or []) if c in valid]
             if "resonance" in f and isinstance(f["resonance"], dict):
                 r = f["resonance"]
                 p["resonance"] = {
@@ -99,6 +103,9 @@ def set_automation(uid, auto):
     if "interval_min" in auto:
         try: a["interval_min"] = max(5, min(1440, int(auto["interval_min"])))
         except Exception: pass
+    if "fresh_days" in auto:
+        try: a["fresh_days"] = max(1, min(90, int(auto["fresh_days"])))
+        except Exception: pass
     save_config(uid, cfg)
     return cfg.get("automation", {})
 
@@ -122,6 +129,12 @@ def all_keywords(projects):
             if k.lower() not in seen:
                 seen.add(k.lower()); out.append(k)
     return out
+
+
+def _proj_uses(p, sid):
+    """Проект использует канал sid? Пустой/не задан список channels = все каналы (обратная совместимость)."""
+    ch = p.get("channels")
+    return (not ch) or (sid in ch)
 
 
 def prefilter(text, projects):
@@ -168,23 +181,35 @@ def scan_user(uid):
     key, platform = _ai_mode(uid, cfg)
     u = db.get_user(uid)
     credits_left = u["credits"] if (u and platform) else 0
-    kws = all_keywords(projects)
     seen = db.existing_ids(uid)            # дедуп одним запросом, дальше — в памяти
+    fresh_days = int((cfg.get("automation", {}) or {}).get("fresh_days", FRESH_DAYS))
+    cutoff = time.time() - max(1, fresh_days) * 86400      # только свежее: суть продукта
     srcs = [s for s in cfg.get("sources", [])
             if s.get("enabled") and s["id"] != "telegram"]   # TG-скан отключён (де-риск)
 
+    # план: для каждого источника — какие проекты его используют + их ключи.
+    # Так GitHub получает только ключи dev-проектов, а пост из канала матчится лишь
+    # с теми проектами, что этот канал выбрали (нет код-шума в SELFIX).
+    plan = []
+    for src in srcs:
+        projs = [p for p in projects if _proj_uses(p, src["id"])]
+        if projs:
+            plan.append((src, projs, all_keywords(projs)))
+    if not plan:
+        return summary
+
     # источники тянем ПАРАЛЛЕЛЬНО (сеть) — иначе 8 источников по очереди = десятки секунд
     from concurrent.futures import ThreadPoolExecutor
-    def _fetch(src):
+    def _fetch(item):
+        src, projs, kws = item
         return src["id"], sources.collect(src["id"], kws, _source_cfg(uid, src, cfg))
     fetched = {}
-    if srcs:
-        with ThreadPoolExecutor(max_workers=min(8, len(srcs))) as ex:
-            for sid, posts in ex.map(_fetch, srcs):
-                fetched[sid] = posts
+    with ThreadPoolExecutor(max_workers=min(8, len(plan))) as ex:
+        for sid, posts in ex.map(_fetch, plan):
+            fetched[sid] = posts
 
     # обработка последовательно (запись/ИИ), но дедуп и префильтр — в памяти
-    for src in srcs:
+    for src, projs, _ in plan:
         sid = src["id"]
         posts = fetched.get(sid, [])
         summary["fetched"] += len(posts)
@@ -193,11 +218,14 @@ def scan_user(uid):
             eid = post["external_id"]
             if eid in seen:
                 continue
-            if not prefilter(post["text"], projects):
+            ts = post.get("ts") or 0
+            if ts and ts < cutoff:          # отсекаем устаревшее — ловим только свежак
+                continue
+            if not prefilter(post["text"], projs):     # только проекты, выбравшие этот канал
                 continue
             if platform and credits_left < COST_REPLY:    # токены кончились → free-режим для остатка
                 key, platform = "", False
-            sig = classifier.process(post, projects, key)
+            sig = classifier.process(post, projs, key)
             if sig and db.add(uid, post, sig):
                 seen.add(eid)
                 found += 1
