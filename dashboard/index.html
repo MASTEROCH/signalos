@@ -496,6 +496,12 @@
   .improve-box{border:1px solid var(--sig2); border-radius:14px; background:rgba(70,243,196,.05); padding:15px; margin:16px 0}
   .improve-h{font-size:14.5px; font-weight:700; color:var(--sig); display:flex; align-items:center; gap:7px}
   .improve-d{font-size:12.5px; color:var(--mut); line-height:1.5; margin:6px 0 12px}
+  .preset-pick{width:100%; margin-bottom:13px; padding:11px 13px; font-size:13.5px; font-weight:600;
+    color:var(--cold); background:rgba(91,140,255,.08); border:1px solid var(--cold);
+    border-radius:11px; cursor:pointer; appearance:none; -webkit-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235b8cff' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 13px center; padding-right:34px}
+  .preset-pick option{background:#10131a; color:var(--ink); font-weight:500}
   .improve-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
 
   /* перегенерация на карточке */
@@ -1752,7 +1758,10 @@ function pmRenderEdit(){
     <div class="improve-box" style="border-color:var(--cold);background:rgba(91,140,255,.05)">
       <div class="improve-h" style="color:var(--cold)">◎ Резонанс — будить только на живого человека</div>
       <div class="improve-d">Радар оценивает не «есть слово», а эмоциональную открытость. Усиление за живые фразы, штраф за сухое/научное/коммерческое. Так «почему я выбираю не тех» → 5/5, а «validity of Big Five в исследовании» → отсеивается.</div>
-      <button class="setbtn sec" style="margin-bottom:13px;font-size:13px;padding:9px 15px" onclick="pmSelfixPreset()">✦ Пресет SELFIX (самопознание)</button>
+      <select class="preset-pick" onchange="pmApplyPreset(this.value);this.selectedIndex=0">
+        <option value="">✦ Применить готовый пресет под продукт…</option>
+        ${Object.entries(PRESETS).map(([k,v])=>`<option value="${k}">${esc(v.label)}</option>`).join('')}
+      </select>
       <label class="wizlabel" style="font-size:13.5px">Идеальный момент клиента (подсказка для ИИ)</label>
       <input value="${esc(p.resonance.ideal||'')}" oninput="PM.proj.resonance.ideal=this.value" placeholder="напр. растерянный человек, задаёт вопрос о себе, ищет понимания">
       <label class="wizlabel" style="font-size:13.5px;margin-top:12px;color:var(--sig)">Усиливать — живые эмоциональные фразы</label>
@@ -1788,13 +1797,58 @@ function pmAddBoost(){ const v=(PM.newBoost||'').trim(); if(v){ (PM.proj.resonan
 function pmRmBoost(i){ PM.proj.resonance.boost.splice(i,1); pmRenderEdit(); }
 function pmAddPen(){ const v=(PM.newPen||'').trim(); if(v){ (PM.proj.resonance.penalty=PM.proj.resonance.penalty||[]).push(v); PM.newPen=''; } pmRenderEdit(); const e=document.getElementById('pe-pen'); if(e)e.focus(); }
 function pmRmPen(i){ PM.proj.resonance.penalty.splice(i,1); pmRenderEdit(); }
-function pmSelfixPreset(){
-  PM.proj.resonance={
+/* Библиотека резонанс-пресетов под продукты Роча.
+   Для эмоциональных продуктов (SELFIX/ANZH/ROCH Audit) штрафуем сухое/научное/B2B.
+   Для коммерческих/B2B (AppHub/Crooked Cook/Beauty Bot) — коммерческий интерес = ХОРОШО,
+   штрафуем только тех, кто ищет работу/делает сам/не покупатель. */
+const PRESETS = {
+  selfix: { label:'SELFIX — самопознание (эмоция)', resonance:{
     ideal:'Растерянный живой человек, который задаёт вопрос О СЕБЕ, выражает боль или ищет понимания себя/других. НЕ исследователь, НЕ покупатель, не сухая теория.',
     boost:['почему я','выбираю не тех','не понимаю себя','что со мной не так','устал от себя','не могу понять себя','кто я на самом деле','почему так со мной','постоянно одно и то же','не разберусь в себе','why do i always','can\'t understand myself','what\'s wrong with me'],
-    penalty:['валидность','validity','reliability','мета-анализ','meta-analysis','research','научн','scientific','коэффициент','купить','цена','сколько стоит','discount','скидка']
-  };
-  pmRenderEdit(); toast('Пресет SELFIX применён — сохрани проект');
+    penalty:['валидность','validity','reliability','мета-анализ','meta-analysis','research','научн','scientific','коэффициент','купить оптом','b2b'] } },
+
+  anzh: { label:'ANZH — косметология/кожа (Анжелика)', resonance:{
+    ideal:'Живой человек с проблемой кожи/внешности: ищет помощь, совет или специалиста, растерян, хочет результат. Желание купить уход — это хорошо. НЕ оптовик, НЕ дистрибьютор.',
+    boost:['не знаю что с кожей','помогите с кожей','замучили высыпания','прыщи не проходят','пигментация не уходит','какой уход посоветуете','посоветуйте косметолога','стесняюсь своей кожи','ничего не помогает коже','устала бороться с кожей','акне','купероз','розацеа','тусклая кожа','где купить уход','acne won\'t go away','what to do about my skin'],
+    penalty:['оптом','wholesale','дистрибуция','поставщик','b2b','франшиза','прайс-лист','вакансия'] } },
+
+  rochaudit: { label:'ROCH Audit — хаос фаундера', resonance:{
+    ideal:'Фаундер/предприниматель в хаосе: слишком много идей, не понимает что делать дальше, выгорает, тонет в задачах, ищет ясность и приоритет. НЕ тендер, не сухой корпоратив.',
+    boost:['не понимаю что делать с бизнесом','слишком много идей','тону в задачах','не знаю с чего начать','хаос в проектах','распыляюсь','не могу выбрать приоритет','выгорел от бизнеса','паралич от выбора','застрял в проекте','founder burnout','overwhelmed','too many ideas','can\'t prioritize'],
+    penalty:['тендер','rfp','госзакупки','вакансия','резюме','enterprise','купить курс','скидка'] } },
+
+  apphub: { label:'AppHub — TMA-студия (B2B, заказ)', resonance:{
+    ideal:'Владелец бизнеса/кафе или фаундер, который хочет Telegram Mini App, программу лояльности или приложение под ключ — есть конкретная задача и готовность платить. Коммерческий интерес = хорошо.',
+    boost:['хочу telegram mini app','нужно приложение для кафе','telegram бот для бизнеса','нужна программа лояльности','ищу разработчика mini app','хочу приложение под ключ','автоматизировать кафе','need a telegram app','loyalty program','build me an app','сделать tma'],
+    penalty:['ищу работу','вакансия','резюме','как самому написать','бесплатный туториал','сделать самому бесплатно'] } },
+
+  crookedcook: { label:'Crooked Cook — игра для кафе (B2B)', resonance:{
+    ideal:'Владелец кафе/ресторана, который хочет удержать гостей, развлечь за столом, поднять возвраты и средний чек. Коммерческий интерес ок.',
+    boost:['как удержать гостей','вовлечь посетителей кафе','лояльность кафе','развлечь гостей за столом','поднять возвраты','маркетинг для кафе','геймификация кафе','engage cafe customers','restaurant retention','гости не возвращаются'],
+    penalty:['ищу работу повар','вакансия','рецепт','купить продукты оптом','аренда помещения'] } },
+
+  beautybot: { label:'Beauty Bot — автоматизация мастеров (B2B)', resonance:{
+    ideal:'Бьюти-мастер/салон, который тонет в записи и переписке в директе, хочет автоматизировать запись и ответы клиентам. Коммерческий интерес ок.',
+    boost:['не успеваю отвечать клиентам','запись клиентов хаос','директ завален','забываю записать клиента','автоматизировать запись','нужен бот для записи','теряю клиентов из директа','напоминания клиентам','salon booking bot','замучилась с записью'],
+    penalty:['хочу записаться','ищу мастера','купить курс','оптом материалы','вакансия'] } },
+
+  cityhub: { label:'CityHUB — куда пойти (Батуми)', resonance:{
+    ideal:'Человек в Батуми или едущий в Батуми: ищет куда сходить, что поесть, развлечения, события сейчас.',
+    boost:['куда сходить в батуми','что делать в батуми','где поесть в батуми','батуми вечером','развлечения батуми','куда пойти','скучно в батуми','еду в батуми','what to do in batumi','batumi recommendations'],
+    penalty:['аренда квартиры','купить недвижимость','виза','работа в батуми','оптом'] } },
+
+  datum: { label:'Datum Empire — TG-игра (игроки)', resonance:{
+    ideal:'Игрок в Telegram-игры: ищет новую игру, обсуждает tap/idle/стратегии, хочет затащиться.',
+    boost:['новая телеграм игра','во что поиграть','tap game','telegram game','скучно поиграть','лучшие tg игры','ищу игру в телеге','play to earn','battle pass','что за игра в телеге'],
+    penalty:['как сделать игру','разработка игры','вакансия','купить аккаунт','чит','накрутка'] } },
+};
+
+function pmApplyPreset(key){
+  const p = PRESETS[key];
+  if(!p) return;
+  PM.proj.resonance = { ideal:p.resonance.ideal, boost:[...p.resonance.boost], penalty:[...p.resonance.penalty] };
+  pmRenderEdit();
+  toast('✦ Пресет «'+p.label+'» применён — проверь и сохрани');
 }
 
 async function pmSave(){

@@ -7,7 +7,11 @@ config/config.json
 
 # локальные данные / рантайм
 signalos.db
+leados.db
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 .venv/
 __pycache__/
 *.pyc
