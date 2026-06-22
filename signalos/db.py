@@ -18,6 +18,20 @@ if _USE_PG:
 
 DB = os.environ.get("LEADOS_DB") or os.environ.get("SIGNALOS_DB") or "leados.db"
 
+# ---------- in-process кэш (один инстанс на Render Free → write-through, когерентно) ----------
+# БД (Supabase) в другом регионе, чем Render → каждый запрос к БД ~350мс через Атлантику.
+# Тёплый просмотр (конфиг + сессия) держим в памяти → 0 запросов к БД на большинстве ответов.
+_USER_TTL = 30          # сек: пользователь (план/кредиты могут устаревать ненадолго — ок)
+_cfg_cache = {}         # uid -> JSON-строка конфига (свежая копия на каждое чтение); инвалидация на запись
+_user_cache = {}        # token -> (user_dict, expires_at); инвалидация на logout/изменение кредитов/плана
+_cache_lock = threading.Lock()
+
+
+def _users_changed():
+    with _cache_lock:
+        _user_cache.clear()
+
+
 # ---------- Postgres: пул соединений ----------
 _POOL = None
 _POOL_LOCK = threading.Lock()
@@ -170,6 +184,7 @@ def set_plan(uid, plan, credits=None):
                 c.execute("UPDATE users SET plan=? WHERE id=?", (plan, uid))
             else:
                 c.execute("UPDATE users SET plan=?, credits=? WHERE id=?", (plan, credits, uid))
+    _users_changed()
 
 
 def add_credits(uid, delta):
@@ -178,6 +193,7 @@ def add_credits(uid, delta):
     else:
         with _c() as c:
             c.execute("UPDATE users SET credits=MAX(0,credits+?) WHERE id=?", (delta, uid))
+    _users_changed()
 
 
 # ---------- sessions ----------
@@ -203,21 +219,32 @@ def session_user(token):
 
 
 def user_for_session(token):
-    """Сессия + пользователь одним запросом (быстрый путь авторизации)."""
+    """Сессия + пользователь одним запросом (быстрый путь авторизации). Кэш на _USER_TTL сек."""
     if not token:
         return None
+    now = time.time()
+    with _cache_lock:
+        e = _user_cache.get(token)
+        if e and e[1] > now:
+            return dict(e[0])
     if _USE_PG:
         r = _q("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=%s",
                (token,), fetch="one")
-        return dict(r) if r else None
+        u = dict(r) if r else None
     else:
         with _c() as c:
             r = c.execute("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?",
                           (token,)).fetchone()
-            return dict(r) if r else None
+            u = dict(r) if r else None
+    if u:
+        with _cache_lock:
+            _user_cache[token] = (dict(u), now + _USER_TTL)
+    return u
 
 
 def delete_session(token):
+    with _cache_lock:
+        _user_cache.pop(token, None)
     if _USE_PG:
         _q("DELETE FROM sessions WHERE token=%s", (token,), commit=True)
     else:
@@ -228,29 +255,35 @@ def delete_session(token):
 # ---------- per-user config ----------
 
 def get_config(uid):
+    with _cache_lock:
+        if uid in _cfg_cache:
+            s = _cfg_cache[uid]
+            return json.loads(s) if s is not None else None        # свежая копия — каллеры мутируют
     if _USE_PG:
         r = _q("SELECT data FROM configs WHERE user_id=%s", (uid,), fetch="one")
-        if not r:
-            return None
-        data = r["data"]
-        return json.loads(data) if isinstance(data, str) else data
+        data = (r["data"] if r else None)
+        cfg = (json.loads(data) if isinstance(data, str) else data) if r else None
     else:
         with _c() as c:
             r = c.execute("SELECT data FROM configs WHERE user_id=?", (uid,)).fetchone()
-            return json.loads(r["data"]) if r else None
+            cfg = json.loads(r["data"]) if r else None
+    with _cache_lock:
+        _cfg_cache[uid] = json.dumps(cfg, ensure_ascii=False) if cfg is not None else None
+    return cfg
 
 
 def save_config(uid, cfg):
+    s = json.dumps(cfg, ensure_ascii=False)
     if _USE_PG:
         _q("INSERT INTO configs(user_id,data) VALUES(%s,%s) "
-           "ON CONFLICT(user_id) DO UPDATE SET data=EXCLUDED.data",
-           (uid, json.dumps(cfg, ensure_ascii=False)), commit=True)
+           "ON CONFLICT(user_id) DO UPDATE SET data=EXCLUDED.data", (uid, s), commit=True)
     else:
         with _c() as c:
             c.execute(
                 "INSERT INTO configs(user_id,data) VALUES(?,?) "
-                "ON CONFLICT(user_id) DO UPDATE SET data=excluded.data",
-                (uid, json.dumps(cfg, ensure_ascii=False)))
+                "ON CONFLICT(user_id) DO UPDATE SET data=excluded.data", (uid, s))
+    with _cache_lock:
+        _cfg_cache[uid] = s        # write-through
 
 
 # ---------- signals ----------
@@ -376,6 +409,8 @@ def charge(uid, n):
     if _USE_PG:
         rc = _q("UPDATE users SET credits=credits-%s WHERE id=%s AND credits>=%s",
                 (n, uid, n), fetch="rowcount", commit=True)
+        if rc > 0:
+            _users_changed()
         return rc > 0
     else:
         with _c() as c:
@@ -383,7 +418,8 @@ def charge(uid, n):
             if not r or r["credits"] < n:
                 return False
             c.execute("UPDATE users SET credits=credits-? WHERE id=?", (n, uid))
-            return True
+        _users_changed()
+        return True
 
 
 def get_signal(uid, sid):
