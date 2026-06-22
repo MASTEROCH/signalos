@@ -164,22 +164,34 @@ def scan_user(uid):
     summary = {"fetched": 0, "signals": 0, "by_source": {}, "spent": 0}
     if not projects:
         return summary
+    db.init()
     key, platform = _ai_mode(uid, cfg)
     u = db.get_user(uid)
     credits_left = u["credits"] if (u and platform) else 0
     kws = all_keywords(projects)
-    db.init()
-    for src in cfg.get("sources", []):
-        if not src.get("enabled"):
-            continue
+    seen = db.existing_ids(uid)            # дедуп одним запросом, дальше — в памяти
+    srcs = [s for s in cfg.get("sources", [])
+            if s.get("enabled") and s["id"] != "telegram"]   # TG-скан отключён (де-риск)
+
+    # источники тянем ПАРАЛЛЕЛЬНО (сеть) — иначе 8 источников по очереди = десятки секунд
+    from concurrent.futures import ThreadPoolExecutor
+    def _fetch(src):
+        return src["id"], sources.collect(src["id"], kws, _source_cfg(uid, src, cfg))
+    fetched = {}
+    if srcs:
+        with ThreadPoolExecutor(max_workers=min(8, len(srcs))) as ex:
+            for sid, posts in ex.map(_fetch, srcs):
+                fetched[sid] = posts
+
+    # обработка последовательно (запись/ИИ), но дедуп и префильтр — в памяти
+    for src in srcs:
         sid = src["id"]
-        if sid == "telegram":          # личная TG-сессия больше не сканируется (де-риск)
-            continue
-        posts = sources.collect(sid, kws, _source_cfg(uid, src, cfg))
+        posts = fetched.get(sid, [])
         summary["fetched"] += len(posts)
         found = 0
         for post in posts:
-            if db.exists(uid, post["external_id"]):
+            eid = post["external_id"]
+            if eid in seen:
                 continue
             if not prefilter(post["text"], projects):
                 continue
@@ -187,6 +199,7 @@ def scan_user(uid):
                 key, platform = "", False
             sig = classifier.process(post, projects, key)
             if sig and db.add(uid, post, sig):
+                seen.add(eid)
                 found += 1
                 if platform and db.charge(uid, COST_REPLY):
                     credits_left -= COST_REPLY

@@ -234,7 +234,15 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True, "credits": db.get_user(uid)["credits"],
                                     "added": PACKS[pack]["tokens"], "demo": True})
         if p == "/api/scan":
-            return self._send(200, scan(uid))
+            if uid in _scanning:
+                return self._send(200, {"started": False, "busy": True})
+            _scanning.add(uid)                     # помечаем ДО ответа — чтобы опрос увидел scanning=true
+            def _bg(u=uid):
+                try: engine.scan_user(u)
+                except Exception as e: print(f"  ⚠ scan {u}: {e}")
+                finally: _scanning.discard(u)
+            threading.Thread(target=_bg, daemon=True).start()
+            return self._send(200, {"started": True})
         if p == "/api/settings/claude":
             b = self._body(); key = (b.get("key") or "").strip()
             if len(key) < 12:

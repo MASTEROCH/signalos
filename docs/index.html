@@ -1075,25 +1075,28 @@ async function scanNow(){
   if(!LIVE){ toast(demoNote()); return; }
   if(scanning) return;
   scanning = true; manualScan = true;
+  const prevTotal = QUEUE.length;
   const btn = document.getElementById('scanbtn'); btn.classList.add('busy'); btn.innerHTML = IC.refresh + ' Сканирую…';
   renderCards();                       // радар на весь фид
-  const minWait = new Promise(r=>setTimeout(r, 3000));   // дать насладиться сканированием (дольше)
-  let res = {};
+  const minWait = new Promise(r=>setTimeout(r, 2600));
   try{
-    res = await fetch('/api/scan',{method:'POST'}).then(r=>r.json());
+    const r = await fetch('/api/scan',{method:'POST'}).then(r=>r.json());
+    // скан идёт в фоне — опрашиваем статус, не держим запрос открытым (на проде это были минуты)
+    for(let i=0; i<80 && scanning; i++){
+      await new Promise(r=>setTimeout(r, 2500));
+      try{ const s = await api('/api/sources'); scanning = s.scanning; }catch(e){ break; }
+    }
     await minWait;
     await reloadQueue();
   }catch(e){ await minWait; toast('Ошибка сканирования'); }
-  // радар схлопывается → карточки вылетают из засветок и встают в сетку
   const rs = document.querySelector('.radarscan');
   if(rs){ rs.classList.add('collapse'); await new Promise(r=>setTimeout(r, 360)); }
   scanning = false; manualScan = false;
   btn.classList.remove('busy'); btn.innerHTML = IC.search + ' Найти клиентов';
   justScanned = true; renderAll();
-  if(res && res.signals!=null){
-    toast(`Найдено <b>${res.signals||0}</b> новых клиентов` + (res.spent?` · −${res.spent} токенов`:''));
-    if(res.spent) refreshMe();
-  }
+  const found = Math.max(0, QUEUE.length - prevTotal);
+  toast(found>0 ? `Найдено <b>${found}</b> новых клиентов` : 'Скан завершён — пока тихо. Настрой резонанс под продукт или зайди позже.');
+  refreshMe();
   setTimeout(()=>{ justScanned = false; renderAll(); }, 1900);
 }
 async function pollScan(){

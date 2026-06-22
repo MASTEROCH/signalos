@@ -91,7 +91,14 @@ def _c():
     c.execute("PRAGMA journal_mode=WAL"); return c
 
 
+_INITED = False
+
+
 def init():
+    global _INITED
+    if _INITED:                 # схему создаём один раз на процесс (а не на каждый скан — это 5 cross-region запросов)
+        return
+    _INITED = True
     if _USE_PG:
         _q("""CREATE TABLE IF NOT EXISTS users(
             id bigserial primary key,
@@ -297,6 +304,17 @@ def exists(uid, external_id):
             return c.execute(
                 "SELECT 1 FROM signals WHERE user_id=? AND external_id=?",
                 (uid, external_id)).fetchone() is not None
+
+
+def existing_ids(uid):
+    """Все external_id пользователя одним запросом — дедуп в памяти вместо запроса на каждый пост."""
+    if _USE_PG:
+        rows = _q("SELECT external_id FROM signals WHERE user_id=%s", (uid,), fetch="all")
+        return {r["external_id"] for r in rows}
+    else:
+        with _c() as c:
+            return {r["external_id"] for r in
+                    c.execute("SELECT external_id FROM signals WHERE user_id=?", (uid,)).fetchall()}
 
 
 def add(uid, post, sig):
