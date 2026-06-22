@@ -1881,13 +1881,26 @@ const PRESET_CHANNELS = {
   datum:['reddit','bluesky','mastodon','lemmy'],
 };
 
+// тематические ключи (топикальность) — пост должен быть ПРО продукт, не только эмоциональным
+const PRESET_KEYWORDS = {
+  selfix:['не понимаю себя','выбираю не тех','что со мной не так','кто я на самом деле','разобраться в себе','understand myself','why do i always','who am i really'],
+  anzh:['проблемная кожа','уход за кожей','от прыщей','от пигментации','нужен косметолог','акне','купероз','розацеа','skincare routine','my skin','acne'],
+  rochaudit:['мой бизнес','мой стартап','слишком много идей','с чего начать бизнес','приоритеты в бизнесе','выгорание фаундера','my startup','my business','too many ideas','founder burnout','scaling my company'],
+  apphub:['telegram mini app','приложение для бизнеса','программа лояльности','бот для кафе','mini app','build an app','app for my business','loyalty program'],
+  crookedcook:['удержать гостей','лояльность кафе','маркетинг кафе','вовлечь гостей','cafe marketing','restaurant retention','engage customers'],
+  beautybot:['запись клиентов','бот для записи','автоматизировать запись','директ завален','salon booking','client booking','appointment bot'],
+  cityhub:['куда сходить','что делать в батуми','где поесть','развлечения батуми','what to do in batumi','things to do batumi'],
+  datum:['телеграм игра','во что поиграть','telegram game','tap game','play to earn','new tg game'],
+};
+
 function pmApplyPreset(key){
   const p = PRESETS[key];
   if(!p) return;
   PM.proj.resonance = { ideal:p.resonance.ideal, boost:[...p.resonance.boost], penalty:[...p.resonance.penalty] };
   if(PRESET_CHANNELS[key]) PM.proj.channels = [...PRESET_CHANNELS[key]];
+  if(PRESET_KEYWORDS[key]) PM.proj.keywords = [...PRESET_KEYWORDS[key]];
   pmRenderEdit();
-  toast('✦ Пресет «'+p.label+'» применён (резонанс + каналы) — проверь и сохрани');
+  toast('✦ Пресет «'+p.label+'» применён (ключи + резонанс + каналы) — проверь и сохрани');
 }
 
 async function pmSave(){

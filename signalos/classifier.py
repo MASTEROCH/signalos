@@ -83,14 +83,16 @@ def _free(post, projects):
         res = p.get("resonance") or {}
         boost_hits = sum(1 for b in res.get("boost", []) if b and b.lower() in low)
         pen_hits = sum(1 for pn in res.get("penalty", []) if pn and pn.lower() in low)
-        # пропускаем, если есть фраза целиком, ИЛИ ≥2 ключ-токена, ИЛИ живой эмоциональный маркер
-        if not (full_hits or len(hit_toks) >= 2 or boost_hits >= 1):
-            continue
-        # анти-фейк: нужен реальный сигнал намерения/эмоции, а не просто упоминание слова
-        if not (intent_hits or q or boost_hits >= 1):
+        # ТОПИКАЛЬНОСТЬ (по теме ли продукта): фраза целиком ИЛИ ≥2 ключевых токена.
+        # Boost-маркеры только УСИЛИВАЮТ, но сами по себе НЕ дают пропуск — иначе ловим
+        # эмоциональные, но не про продукт посты («помогите с депрессией брата» на радаре фаундера).
+        if not (full_hits or len(hit_toks) >= 2):
             continue
         # сухой/исследователь/покупатель без живой эмоции — это НЕ наш человек
         if pen_hits and not boost_hits:
+            continue
+        # анти-фейк: нужен реальный сигнал живого запроса (вопрос / намерение / эмоция), а не сухое упоминание
+        if not (intent_hits or q or boost_hits >= 1):
             continue
         score = len(hit_toks) + len(full_hits) * 2 + intent_hits * 2 + q + boost_hits * 4 - pen_hits * 5
         if score > best_score:
