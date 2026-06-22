@@ -7,7 +7,7 @@
 """
 import json, gzip, urllib.request, urllib.parse, re
 
-UA = "SignalOS/0.2 (lead radar; +https://github.com/roch)"
+UA = "LeadOS/0.3 (lead radar; +https://github.com/roch)"
 
 
 def http_get(url, timeout=12, headers=None):

@@ -1,5 +1,11 @@
-"""db.py — мультитенантное хранилище SaaS. Postgres (psycopg2) если есть DATABASE_URL, иначе SQLite."""
-import os, json, sqlite3, time
+"""db.py — мультитенантное хранилище SaaS. Postgres (psycopg2) если есть DATABASE_URL, иначе SQLite.
+
+Postgres-путь использует ПУЛ соединений: к Supabase-пулеру дорого коннектиться на каждый запрос
+(TLS-хендшейк ~100-300мс по сети из Render), поэтому держим тёплые соединения и переиспользуем.
+Пул самовосстанавливается: если Supabase уронил простаивающее соединение или Render просыпался
+после сна — битый коннект отбрасывается и запрос повторяется на свежем.
+"""
+import os, json, sqlite3, time, threading
 
 # ---------- backend detection ----------
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -8,15 +14,63 @@ _USE_PG = bool(DATABASE_URL)
 if _USE_PG:
     import psycopg2
     import psycopg2.extras
+    import psycopg2.pool
 
-DB = os.environ.get("SIGNALOS_DB", "signalos.db")
+DB = os.environ.get("LEADOS_DB") or os.environ.get("SIGNALOS_DB") or "leados.db"
 
-# ---------- connection helpers ----------
+# ---------- Postgres: пул соединений ----------
+_POOL = None
+_POOL_LOCK = threading.Lock()
 
-def _pg():
-    conn = psycopg2.connect(DATABASE_URL)
-    conn.autocommit = False
-    return conn
+
+def _pool():
+    global _POOL
+    if _POOL is None:
+        with _POOL_LOCK:
+            if _POOL is None:
+                _POOL = psycopg2.pool.ThreadedConnectionPool(
+                    1, 20, DATABASE_URL,
+                    keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3)
+    return _POOL
+
+
+def _q(sql, args=(), fetch=None, commit=False):
+    """Один запрос через пул. fetch: None|'one'|'all'|'rowcount'. Ретрай раз на битом коннекте."""
+    last = None
+    for _ in (0, 1):
+        pool = _pool()
+        conn = pool.getconn()
+        try:
+            if conn.closed:
+                raise psycopg2.OperationalError("stale connection")
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute(sql, args)
+            if fetch == "one":
+                out = cur.fetchone()
+            elif fetch == "all":
+                out = cur.fetchall()
+            elif fetch == "rowcount":
+                out = cur.rowcount
+            else:
+                out = None
+            if commit:
+                conn.commit()
+            cur.close()
+            pool.putconn(conn)
+            return out
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+            last = e
+            try: pool.putconn(conn, close=True)   # выбросить битый коннект, пул создаст свежий
+            except Exception: pass
+            continue
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            try: pool.putconn(conn)
+            except Exception: pass
+            raise
+    raise last
+
 
 def _c():
     c = sqlite3.connect(DB, timeout=10); c.row_factory = sqlite3.Row
@@ -25,23 +79,21 @@ def _c():
 
 def init():
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("""CREATE TABLE IF NOT EXISTS users(
+        _q("""CREATE TABLE IF NOT EXISTS users(
             id bigserial primary key,
             email text unique,
             pass_hash text, salt text,
             plan text default 'free',
             credits integer default 300,
-            created double precision)""")
-        cur.execute("""CREATE TABLE IF NOT EXISTS sessions(
+            created double precision)""", commit=True)
+        _q("""CREATE TABLE IF NOT EXISTS sessions(
             token text primary key,
             user_id bigint references users(id) on delete cascade,
-            created double precision)""")
-        cur.execute("""CREATE TABLE IF NOT EXISTS configs(
+            created double precision)""", commit=True)
+        _q("""CREATE TABLE IF NOT EXISTS configs(
             user_id bigint primary key references users(id) on delete cascade,
-            data jsonb)""")
-        cur.execute("""CREATE TABLE IF NOT EXISTS signals(
+            data jsonb)""", commit=True)
+        _q("""CREATE TABLE IF NOT EXISTS signals(
             id bigserial primary key,
             user_id bigint references users(id) on delete cascade,
             external_id text, source text, source_label text, project text,
@@ -50,10 +102,8 @@ def init():
             why text, hl text, draft text, lang text,
             status text default 'queue',
             ts double precision, created double precision,
-            unique(user_id, external_id))""")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_signals_user ON signals(user_id, status)")
-        conn.commit()
-        cur.close(); conn.close()
+            unique(user_id, external_id))""", commit=True)
+        _q("CREATE INDEX IF NOT EXISTS idx_signals_user ON signals(user_id, status)", commit=True)
     else:
         with _c() as c:
             c.execute("""CREATE TABLE IF NOT EXISTS users(
@@ -77,14 +127,9 @@ def init():
 
 def create_user(email, pass_hash, salt):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO users(email,pass_hash,salt,created) VALUES(%s,%s,%s,%s) RETURNING id",
-            (email.lower().strip(), pass_hash, salt, time.time()))
-        row = cur.fetchone()
-        conn.commit(); cur.close(); conn.close()
-        return row[0]
+        r = _q("INSERT INTO users(email,pass_hash,salt,created) VALUES(%s,%s,%s,%s) RETURNING id",
+               (email.lower().strip(), pass_hash, salt, time.time()), fetch="one", commit=True)
+        return r["id"]
     else:
         with _c() as c:
             cur = c.execute(
@@ -95,11 +140,7 @@ def create_user(email, pass_hash, salt):
 
 def get_user_by_email(email):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT * FROM users WHERE email=%s", (email.lower().strip(),))
-        r = cur.fetchone()
-        cur.close(); conn.close()
+        r = _q("SELECT * FROM users WHERE email=%s", (email.lower().strip(),), fetch="one")
         return dict(r) if r else None
     else:
         with _c() as c:
@@ -109,11 +150,7 @@ def get_user_by_email(email):
 
 def get_user(uid):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT * FROM users WHERE id=%s", (uid,))
-        r = cur.fetchone()
-        cur.close(); conn.close()
+        r = _q("SELECT * FROM users WHERE id=%s", (uid,), fetch="one")
         return dict(r) if r else None
     else:
         with _c() as c:
@@ -123,13 +160,10 @@ def get_user(uid):
 
 def set_plan(uid, plan, credits=None):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
         if credits is None:
-            cur.execute("UPDATE users SET plan=%s WHERE id=%s", (plan, uid))
+            _q("UPDATE users SET plan=%s WHERE id=%s", (plan, uid), commit=True)
         else:
-            cur.execute("UPDATE users SET plan=%s, credits=%s WHERE id=%s", (plan, credits, uid))
-        conn.commit(); cur.close(); conn.close()
+            _q("UPDATE users SET plan=%s, credits=%s WHERE id=%s", (plan, credits, uid), commit=True)
     else:
         with _c() as c:
             if credits is None:
@@ -140,10 +174,7 @@ def set_plan(uid, plan, credits=None):
 
 def add_credits(uid, delta):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("UPDATE users SET credits=GREATEST(0,credits+%s) WHERE id=%s", (delta, uid))
-        conn.commit(); cur.close(); conn.close()
+        _q("UPDATE users SET credits=GREATEST(0,credits+%s) WHERE id=%s", (delta, uid), commit=True)
     else:
         with _c() as c:
             c.execute("UPDATE users SET credits=MAX(0,credits+?) WHERE id=?", (delta, uid))
@@ -153,10 +184,7 @@ def add_credits(uid, delta):
 
 def create_session(uid, token):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("INSERT INTO sessions(token,user_id,created) VALUES(%s,%s,%s)", (token, uid, time.time()))
-        conn.commit(); cur.close(); conn.close()
+        _q("INSERT INTO sessions(token,user_id,created) VALUES(%s,%s,%s)", (token, uid, time.time()), commit=True)
     else:
         with _c() as c:
             c.execute("INSERT INTO sessions(token,user_id,created) VALUES(?,?,?)", (token, uid, time.time()))
@@ -166,24 +194,32 @@ def session_user(token):
     if not token:
         return None
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("SELECT user_id FROM sessions WHERE token=%s", (token,))
-        r = cur.fetchone()
-        cur.close(); conn.close()
-        return r[0] if r else None
+        r = _q("SELECT user_id FROM sessions WHERE token=%s", (token,), fetch="one")
+        return r["user_id"] if r else None
     else:
         with _c() as c:
             r = c.execute("SELECT user_id FROM sessions WHERE token=?", (token,)).fetchone()
             return r["user_id"] if r else None
 
 
+def user_for_session(token):
+    """Сессия + пользователь одним запросом (быстрый путь авторизации)."""
+    if not token:
+        return None
+    if _USE_PG:
+        r = _q("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=%s",
+               (token,), fetch="one")
+        return dict(r) if r else None
+    else:
+        with _c() as c:
+            r = c.execute("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?",
+                          (token,)).fetchone()
+            return dict(r) if r else None
+
+
 def delete_session(token):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM sessions WHERE token=%s", (token,))
-        conn.commit(); cur.close(); conn.close()
+        _q("DELETE FROM sessions WHERE token=%s", (token,), commit=True)
     else:
         with _c() as c:
             c.execute("DELETE FROM sessions WHERE token=?", (token,))
@@ -193,17 +229,11 @@ def delete_session(token):
 
 def get_config(uid):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("SELECT data FROM configs WHERE user_id=%s", (uid,))
-        r = cur.fetchone()
-        cur.close(); conn.close()
+        r = _q("SELECT data FROM configs WHERE user_id=%s", (uid,), fetch="one")
         if not r:
             return None
-        data = r[0]
-        if isinstance(data, str):
-            return json.loads(data)
-        return data
+        data = r["data"]
+        return json.loads(data) if isinstance(data, str) else data
     else:
         with _c() as c:
             r = c.execute("SELECT data FROM configs WHERE user_id=?", (uid,)).fetchone()
@@ -212,13 +242,9 @@ def get_config(uid):
 
 def save_config(uid, cfg):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO configs(user_id,data) VALUES(%s,%s) "
-            "ON CONFLICT(user_id) DO UPDATE SET data=EXCLUDED.data",
-            (uid, json.dumps(cfg, ensure_ascii=False)))
-        conn.commit(); cur.close(); conn.close()
+        _q("INSERT INTO configs(user_id,data) VALUES(%s,%s) "
+           "ON CONFLICT(user_id) DO UPDATE SET data=EXCLUDED.data",
+           (uid, json.dumps(cfg, ensure_ascii=False)), commit=True)
     else:
         with _c() as c:
             c.execute(
@@ -231,12 +257,8 @@ def save_config(uid, cfg):
 
 def exists(uid, external_id):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("SELECT 1 FROM signals WHERE user_id=%s AND external_id=%s", (uid, external_id))
-        r = cur.fetchone()
-        cur.close(); conn.close()
-        return r is not None
+        return _q("SELECT 1 FROM signals WHERE user_id=%s AND external_id=%s",
+                  (uid, external_id), fetch="one") is not None
     else:
         with _c() as c:
             return c.execute(
@@ -247,9 +269,7 @@ def exists(uid, external_id):
 def add(uid, post, sig):
     try:
         if _USE_PG:
-            conn = _pg()
-            cur = conn.cursor()
-            cur.execute(
+            rc = _q(
                 """INSERT INTO signals
                 (user_id,external_id,source,source_label,project,author,text,url,temp,
                  strength,conf,why,hl,draft,lang,status,ts,created)
@@ -259,10 +279,9 @@ def add(uid, post, sig):
                  post.get("author", ""), post["text"], post.get("url", ""), sig["temp"],
                  sig["strength"], sig["conf"], sig["why"],
                  json.dumps(sig.get("hl", []), ensure_ascii=False), sig["draft"],
-                 post.get("lang", "en"), post.get("ts", time.time()), time.time()))
-            inserted = cur.rowcount > 0
-            conn.commit(); cur.close(); conn.close()
-            return inserted
+                 post.get("lang", "en"), post.get("ts", time.time()), time.time()),
+                fetch="rowcount", commit=True)
+            return rc > 0
         else:
             with _c() as c:
                 c.execute(
@@ -280,31 +299,23 @@ def add(uid, post, sig):
         return False
 
 
+def _parse_hl(d):
+    if isinstance(d.get("hl"), str):
+        d["hl"] = json.loads(d["hl"] or "[]")
+    elif d.get("hl") is None:
+        d["hl"] = []
+    return d
+
+
 def queue(uid, project=None):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         if project and project != "all":
-            cur.execute(
-                "SELECT * FROM signals WHERE user_id=%s AND status='queue' AND project=%s "
-                "ORDER BY strength DESC, ts DESC LIMIT 200",
-                (uid, project))
+            rows = _q("SELECT * FROM signals WHERE user_id=%s AND status='queue' AND project=%s "
+                      "ORDER BY strength DESC, ts DESC LIMIT 200", (uid, project), fetch="all")
         else:
-            cur.execute(
-                "SELECT * FROM signals WHERE user_id=%s AND status='queue' "
-                "ORDER BY strength DESC, ts DESC LIMIT 200",
-                (uid,))
-        rows = cur.fetchall()
-        cur.close(); conn.close()
-        out = []
-        for r in rows:
-            d = dict(r)
-            if isinstance(d.get("hl"), str):
-                d["hl"] = json.loads(d["hl"] or "[]")
-            elif d.get("hl") is None:
-                d["hl"] = []
-            out.append(d)
-        return out
+            rows = _q("SELECT * FROM signals WHERE user_id=%s AND status='queue' "
+                      "ORDER BY strength DESC, ts DESC LIMIT 200", (uid,), fetch="all")
+        return [_parse_hl(dict(r)) for r in rows]
     else:
         q = "SELECT * FROM signals WHERE user_id=? AND status='queue'"; a = [uid]
         if project and project != "all":
@@ -320,10 +331,7 @@ def queue(uid, project=None):
 
 def set_status(uid, sid, status):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("UPDATE signals SET status=%s WHERE id=%s AND user_id=%s", (status, sid, uid))
-        conn.commit(); cur.close(); conn.close()
+        _q("UPDATE signals SET status=%s WHERE id=%s AND user_id=%s", (status, sid, uid), commit=True)
     else:
         with _c() as c:
             c.execute("UPDATE signals SET status=? WHERE id=? AND user_id=?", (status, sid, uid))
@@ -331,10 +339,8 @@ def set_status(uid, sid, status):
 
 def stats(uid):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
         since = time.time() - 86400
-        cur.execute(
+        row = _q(
             """SELECT
                 count(*) FILTER (WHERE status='queue') AS q,
                 count(*) FILTER (WHERE status='approved') AS a,
@@ -342,11 +348,9 @@ def stats(uid):
                 count(*) FILTER (WHERE status='queue' AND temp='hot') AS hot,
                 count(*) FILTER (WHERE created > %s) AS today
             FROM signals WHERE user_id=%s""",
-            (since, uid))
-        row = cur.fetchone()
-        cur.close(); conn.close()
-        return {"queue": row[0] or 0, "approved": row[1] or 0, "skipped": row[2] or 0,
-                "hot": row[3] or 0, "today": row[4] or 0}
+            (since, uid), fetch="one")
+        return {"queue": row["q"] or 0, "approved": row["a"] or 0, "skipped": row["s"] or 0,
+                "hot": row["hot"] or 0, "today": row["today"] or 0}
     else:
         with _c() as c:
             row = c.execute(
@@ -361,10 +365,7 @@ def stats(uid):
 
 def delete_project_signals(uid, pid):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM signals WHERE user_id=%s AND project=%s", (uid, pid))
-        conn.commit(); cur.close(); conn.close()
+        _q("DELETE FROM signals WHERE user_id=%s AND project=%s", (uid, pid), commit=True)
     else:
         with _c() as c:
             c.execute("DELETE FROM signals WHERE user_id=? AND project=?", (uid, pid))
@@ -373,14 +374,9 @@ def delete_project_signals(uid, pid):
 def charge(uid, n):
     """Списать n токенов. True если хватило и списали, иначе False."""
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE users SET credits=credits-%s WHERE id=%s AND credits>=%s",
-            (n, uid, n))
-        ok = cur.rowcount > 0
-        conn.commit(); cur.close(); conn.close()
-        return ok
+        rc = _q("UPDATE users SET credits=credits-%s WHERE id=%s AND credits>=%s",
+                (n, uid, n), fetch="rowcount", commit=True)
+        return rc > 0
     else:
         with _c() as c:
             r = c.execute("SELECT credits FROM users WHERE id=?", (uid,)).fetchone()
@@ -392,19 +388,8 @@ def charge(uid, n):
 
 def get_signal(uid, sid):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT * FROM signals WHERE id=%s AND user_id=%s", (sid, uid))
-        r = cur.fetchone()
-        cur.close(); conn.close()
-        if not r:
-            return None
-        d = dict(r)
-        if isinstance(d.get("hl"), str):
-            d["hl"] = json.loads(d["hl"] or "[]")
-        elif d.get("hl") is None:
-            d["hl"] = []
-        return d
+        r = _q("SELECT * FROM signals WHERE id=%s AND user_id=%s", (sid, uid), fetch="one")
+        return _parse_hl(dict(r)) if r else None
     else:
         with _c() as c:
             r = c.execute(
@@ -416,10 +401,7 @@ def get_signal(uid, sid):
 
 def update_draft(uid, sid, draft):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("UPDATE signals SET draft=%s WHERE id=%s AND user_id=%s", (draft, sid, uid))
-        conn.commit(); cur.close(); conn.close()
+        _q("UPDATE signals SET draft=%s WHERE id=%s AND user_id=%s", (draft, sid, uid), commit=True)
     else:
         with _c() as c:
             c.execute("UPDATE signals SET draft=? WHERE id=? AND user_id=?", (draft, sid, uid))
@@ -427,10 +409,8 @@ def update_draft(uid, sid, draft):
 
 def recent_signals(uid, project, limit=40):
     if _USE_PG:
-        conn = _pg(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT text, status FROM signals WHERE user_id=%s AND project=%s ORDER BY created DESC LIMIT %s",
-                    (uid, project, limit))
-        rows = cur.fetchall(); cur.close(); conn.close()
+        rows = _q("SELECT text, status FROM signals WHERE user_id=%s AND project=%s "
+                  "ORDER BY created DESC LIMIT %s", (uid, project, limit), fetch="all")
         return [dict(r) for r in rows]
     with _c() as c:
         rows = c.execute("SELECT text, status FROM signals WHERE user_id=? AND project=? ORDER BY created DESC LIMIT ?",
@@ -441,15 +421,11 @@ def recent_signals(uid, project, limit=40):
 def digest_signals(uid, since, min_strength, limit=6):
     """Свежие искры для утреннего дайджеста: в очереди, найдены после `since`, резонанс>=min."""
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(
+        rows = _q(
             """SELECT id, project, source_label, text, url, draft, strength, why, temp, created
             FROM signals WHERE user_id=%s AND status='queue' AND strength>=%s AND created>%s
             ORDER BY strength DESC, created DESC LIMIT %s""",
-            (uid, min_strength, since, limit))
-        rows = cur.fetchall()
-        cur.close(); conn.close()
+            (uid, min_strength, since, limit), fetch="all")
         return [dict(r) for r in rows]
     else:
         with _c() as c:
@@ -463,14 +439,9 @@ def digest_signals(uid, since, min_strength, limit=6):
 
 def export_rows(uid):
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(
+        rows = _q(
             """SELECT source_label, project, temp, strength, conf, text, url, draft, status, created
-            FROM signals WHERE user_id=%s ORDER BY created DESC""",
-            (uid,))
-        rows = cur.fetchall()
-        cur.close(); conn.close()
+            FROM signals WHERE user_id=%s ORDER BY created DESC""", (uid,), fetch="all")
         return [dict(r) for r in rows]
     else:
         with _c() as c:
@@ -483,12 +454,8 @@ def export_rows(uid):
 
 def all_user_ids():
     if _USE_PG:
-        conn = _pg()
-        cur = conn.cursor()
-        cur.execute("SELECT user_id FROM configs")
-        rows = cur.fetchall()
-        cur.close(); conn.close()
-        return [r[0] for r in rows]
+        rows = _q("SELECT user_id FROM configs", fetch="all")
+        return [r["user_id"] for r in rows]
     else:
         with _c() as c:
             return [r["user_id"] for r in c.execute("SELECT user_id FROM configs").fetchall()]

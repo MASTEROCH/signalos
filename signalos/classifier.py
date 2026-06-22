@@ -10,8 +10,8 @@ Claude вызывается напрямую через urllib (SDK ставит
 """
 import os, json, re, urllib.request
 
-CLASSIFY_MODEL = os.environ.get("SIGNALOS_CLASSIFY_MODEL", "claude-haiku-4-5")
-DRAFT_MODEL = os.environ.get("SIGNALOS_DRAFT_MODEL", "claude-sonnet-4-6")
+CLASSIFY_MODEL = os.environ.get("LEADOS_CLASSIFY_MODEL") or os.environ.get("SIGNALOS_CLASSIFY_MODEL", "claude-haiku-4-5")
+DRAFT_MODEL = os.environ.get("LEADOS_DRAFT_MODEL") or os.environ.get("SIGNALOS_DRAFT_MODEL", "claude-sonnet-4-6")
 
 
 def current_key():
@@ -25,7 +25,7 @@ def utm_link(project):
     if not link:
         return ""
     sep = "&" if "?" in link else "?"
-    return f"{link}{sep}utm_source=signalos&utm_medium=radar&utm_campaign={project.get('id','')}"
+    return f"{link}{sep}utm_source=leados&utm_medium=radar&utm_campaign={project.get('id','')}"
 
 INTENT = {  # фразы-маркеры намерения → язык-независимый сигнал «человек ищет решение»
     "ru": ["посоветуйте", "подскажите", "кто знает", "ищу", "нужен", "нужна", "помогите",

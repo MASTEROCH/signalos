@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalOS — Radar лидов</title>
+<title>LeadOS — оружие фаундера: находим клиентов</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
@@ -626,7 +626,7 @@
   <aside class="side">
     <div class="brand">
       <div class="radar"></div>
-      <div><b>Signal<span>OS</span></b><small>Radar лидов</small></div>
+      <div><b>Lead<span>OS</span></b><small>оружие фаундера</small></div>
     </div>
 
     <div class="seclabel sec-row">Проекты <span class="manage" id="pm-gear" onclick="openProjects()" title="Управление проектами"></span></div>
@@ -815,14 +815,25 @@ async function init(){
 }
 async function startApp(){
   hideGate(); renderUser(); updateTokens();
-  const status = await api('/api/status'); claudeOn = status.claude;
+  // одной параллельной волной вместо 6 последовательных запросов
+  const qs = '/api/queue' + (filter!=='all' ? '?project='+filter : '');
+  const [status, projects, src, queue, stats] = await Promise.all([
+    api('/api/status'),
+    api('/api/projects'),
+    api('/api/sources'),
+    api(qs),
+    api('/api/stats').catch(()=>null),
+  ]);
+  claudeOn = status.claude;
   if(!status.configured){ openWizard(); return; }
-  await loadMain();
+  PROJECTS = projects; SOURCES = src.sources; claudeOn = src.claude;
+  QUEUE = queue; totalToday = stats ? stats.today : QUEUE.length;
+  setMode(true); renderAll();
   if(status.scanning){ scanning = true; pollScan(); }
 }
 async function loadMain(){
-  PROJECTS = await api('/api/projects');
-  const src = await api('/api/sources'); SOURCES = src.sources; claudeOn = src.claude;
+  const [projects, src] = await Promise.all([api('/api/projects'), api('/api/sources')]);
+  PROJECTS = projects; SOURCES = src.sources; claudeOn = src.claude;
   await reloadQueue();
   setMode(true);
   renderAll();
@@ -831,13 +842,16 @@ function demoMode(){
   LIVE = false;                         // бэкенда нет → кнопки показывают демо-уведомление, а не «ошибку загрузки»
   PROJECTS = DEMO_PROJECTS; SOURCES = DEMO_SOURCES;
   QUEUE = DEMO_SIGNALS.map(s=>({...s})); totalToday = QUEUE.length;
-  ME = ME || {email:'demo@signalos', plan:'free', credits:300};
+  ME = ME || {email:'demo@leados', plan:'free', credits:300};
   updateTokens(); renderUser();
   setMode(false);
 }
 async function reloadQueue(){
-  QUEUE = await api('/api/queue' + (filter!=='all' ? '?project='+filter : ''));
-  try{ const st = await api('/api/stats'); totalToday = st.today; }catch(e){ totalToday = QUEUE.length; }
+  const [q, st] = await Promise.all([
+    api('/api/queue' + (filter!=='all' ? '?project='+filter : '')),
+    api('/api/stats').catch(()=>null),
+  ]);
+  QUEUE = q; totalToday = st ? st.today : QUEUE.length;
 }
 function setMode(live){
   const pill = document.getElementById('modepill');   // в SaaS-режиме элемента нет — безопасно выходим
@@ -971,7 +985,7 @@ function radarScanHTML(){
 function onboardingHTML(){
   if(!LIVE){
     return `<div class="empty"><div class="radar"></div><h3>Это демо</h3>
-      <div>Чтобы радар искал <b>реальных</b> клиентов — запусти <code>./run.sh</code> в папке signalos.</div></div>`;
+      <div>Чтобы радар искал <b>реальных</b> клиентов — запусти <code>./run.sh</code> в папке проекта.</div></div>`;
   }
   if(LIVE && PROJECTS.length===0){
     return `<div class="empty"><div class="radar"></div>
@@ -1253,10 +1267,9 @@ async function openSettings(){
   document.getElementById('settings').classList.add('show');
   document.getElementById('setbody').innerHTML = '<div class="wizspin" style="margin:50px auto"></div>';
   try{
-    SET.status = await api('/api/settings');
-    SET.sources = (await api('/api/sources')).sources;
-    SET.billing = await api('/api/billing');
-    SET.auto = await api('/api/automation');
+    const [stt, src, bil, aut] = await Promise.all([
+      api('/api/settings'), api('/api/sources'), api('/api/billing'), api('/api/automation')]);
+    SET.status = stt; SET.sources = src.sources; SET.billing = bil; SET.auto = aut;
     SET.tg.chats = (SET.status.telegram.chats||[]).join(', ');
     SET.tgState = SET.status.telegram.connected ? 'connected' : 'idle';
     const d = SET.status.digest||{};
@@ -1532,13 +1545,13 @@ function renderGate(){
   document.getElementById('gate').innerHTML = `
    <div class="gate-wrap">
      <div class="gate-hero">
-       <div class="gate-badge">${IC.radar} SignalOS</div>
+       <div class="gate-badge">${IC.radar} LeadOS</div>
        <h1>Находи <span>клиентов</span>, пока другие сливают бюджет на рекламу</h1>
-       <div class="lead">Радар сам ищет в интернете людей, которые прямо сейчас пишут «посоветуйте…», «ищу…» — то, что решает твой продукт. Ты только отвечаешь. Без блога, без бюджета.</div>
+       <div class="lead">Оружие фаундера. Радар сам ищет в интернете людей, которые прямо сейчас пишут «посоветуйте…», «ищу…» — то, что решает твой продукт. Ты помогаешь по-человечески, ненавязчиво. Без блога, без бюджета, без спама.</div>
        <div class="gate-feats">
-         <div class="gate-feat"><span class="fi">${IC.search}</span><div><b>6 каналов из коробки</b><small>HackerNews, Reddit, Bluesky, Lemmy, Google Alerts, Telegram</small></div></div>
+         <div class="gate-feat"><span class="fi">${IC.search}</span><div><b>8 каналов из коробки</b><small>HackerNews, Reddit, Bluesky, Lemmy, GitHub, Stack Exchange, Mastodon, Google Alerts</small></div></div>
          <div class="gate-feat"><span class="fi">${IC.spark}</span><div><b>Готовый ответ под каждое сообщение</b><small>ИИ пишет по-человечески, со ссылкой — скопировал и отправил</small></div></div>
-         <div class="gate-feat"><span class="fi">${IC.radar}</span><div><b>Работает само</b><small>Сканирует круглосуточно — ты заходишь раз в день</small></div></div>
+         <div class="gate-feat"><span class="fi">${IC.send}</span><div><b>Утренний дайджест в Telegram</b><small>«🛰 N искр готовы» прямо в личку — открыл, ответил, закрыл</small></div></div>
        </div>
      </div>
      <div class="gate-side">
@@ -1554,7 +1567,7 @@ function renderGate(){
          <div class="toggle">${reg?'Уже есть аккаунт?':'Нет аккаунта?'} <a onclick="authMode='${reg?'login':'register'}';renderGate()">${reg?'Войти':'Создать'}</a></div>
        </div>
      </div>
-     <div class="gate-foot">Бесплатный тариф навсегда · Платные тарифы для Telegram и авто-поиска · Твои данные — только твои</div>
+     <div class="gate-foot">Бесплатный тариф навсегда · Платные тарифы за авто-поиск 24/7 и дайджест · Твои данные — только твои</div>
    </div>`;
   setTimeout(()=>{ const e=document.getElementById('au-email'); if(e && !authEmail) e.focus(); }, 60);
 }
@@ -1694,7 +1707,7 @@ async function pmList(){
 function pmNew(){ closeProjects(); addProduct(); }
 function exportCSV(){
   if(!LIVE){ toast(demoNote()); return; }
-  const a=document.createElement('a'); a.href='/api/export'; a.download='signalos_leads.csv';
+  const a=document.createElement('a'); a.href='/api/export'; a.download='leados_leads.csv';
   document.body.appendChild(a); a.click(); a.remove(); toast('Выгружаю лиды в CSV…');
 }
 

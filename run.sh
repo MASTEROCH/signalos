@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SignalOS — запуск одной командой. Ноль зависимостей, ноль ключей.
+# LeadOS — запуск одной командой. Ноль зависимостей, ноль ключей.
 cd "$(dirname "$0")" || exit 1
 
 # конфиг не копируем — при первом запуске дашборд сам проведёт настройку (мастер)
@@ -7,7 +7,7 @@ cd "$(dirname "$0")" || exit 1
 # (опц.) ключи из .env, если есть
 [ -f .env ] && set -a && . ./.env && set +a
 
-PORT="${SIGNALOS_PORT:-8000}"
+PORT="${LEADOS_PORT:-${SIGNALOS_PORT:-8000}}"
 
 # используем venv (там Telethon для Telegram), иначе системный python3
 PY="python3"

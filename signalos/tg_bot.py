@@ -14,7 +14,7 @@ def _call(token, method, params=None, timeout=15):
     url = API.format(token=token, method=method)
     data = urllib.parse.urlencode(params or {}).encode()
     req = urllib.request.Request(url, data=data if params else None,
-                                 headers={"User-Agent": "SignalOS"})
+                                 headers={"User-Agent": "LeadOS"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())

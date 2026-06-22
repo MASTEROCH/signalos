@@ -6,7 +6,8 @@ import os, time
 from . import db, classifier, sources, tg_bot
 
 # Платформенный ИИ-ключ (для пользователей без своего ключа — за токены)
-PLATFORM_KEY = os.environ.get("SIGNALOS_PLATFORM_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
+PLATFORM_KEY = (os.environ.get("LEADOS_PLATFORM_KEY") or os.environ.get("SIGNALOS_PLATFORM_KEY")
+                or os.environ.get("ANTHROPIC_API_KEY", ""))
 COST_REPLY = 1       # токенов за ИИ-ответ на найденного клиента
 COST_REGEN = 2       # за перегенерацию ответа
 COST_SUGGEST = 5     # за умный подбор фраз в мастере
@@ -274,7 +275,7 @@ def render_digest(cfg, rows):
         if s.get("url"):
             b.append(f"🔗 <a href=\"{e(s['url'])}\">открыть оригинал и ответить</a>")
         blocks.append("\n".join(b))
-    blocks.append("\n— SignalOS · отвечай как человек, помоги первым, ссылку роняй один раз.")
+    blocks.append("\n— LeadOS · отвечай как человек, помоги первым, ссылку роняй один раз.")
     return "\n".join(blocks)
 
 

@@ -1,5 +1,5 @@
 """
-server.py — SaaS-сервер SignalOS (stdlib). Авторизация по cookie-сессии, данные по user_id.
+server.py — SaaS-сервер LeadOS (stdlib). Авторизация по cookie-сессии, данные по user_id.
 Запуск:  ./run.sh   →  http://localhost:8000
 """
 import os, json, time, threading, urllib.parse
@@ -7,8 +7,15 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 from . import db, engine, setup, settings, auth
 
-PORT = int(os.environ.get("PORT") or os.environ.get("SIGNALOS_PORT", "8000"))   # хостинги задают PORT
-INTERVAL = int(os.environ.get("SIGNALOS_SCAN_INTERVAL", "900"))
+def _env(*names, default=None):           # LEADOS_* приоритетнее, SIGNALOS_* для обратной совместимости
+    for n in names:
+        v = os.environ.get(n)
+        if v:
+            return v
+    return default
+
+PORT = int(os.environ.get("PORT") or _env("LEADOS_PORT", "SIGNALOS_PORT", default="8000"))   # хостинги задают PORT
+INTERVAL = int(_env("LEADOS_SCAN_INTERVAL", "SIGNALOS_SCAN_INTERVAL", default="900"))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _scanning = set()   # uids, по которым сейчас идёт скан
 
@@ -81,6 +88,7 @@ def sources_of(uid):
 
 
 class H(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"   # keep-alive: браузер переиспользует TCP/TLS между запросами
     def log_message(self, *a): pass
 
     # ---------- helpers ----------
@@ -170,7 +178,7 @@ class H(BaseHTTPRequestHandler):
             data = ("﻿" + buf.getvalue()).encode("utf-8")   # BOM для Excel
             self.send_response(200)
             self.send_header("Content-Type", "text/csv; charset=utf-8")
-            self.send_header("Content-Disposition", "attachment; filename=signalos_leads.csv")
+            self.send_header("Content-Disposition", "attachment; filename=leados_leads.csv")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers(); self.wfile.write(data); return
         parts = p.strip("/").split("/")
@@ -354,7 +362,7 @@ def auto_scan_loop():
 def main():
     db.init()
     os.makedirs("sessions", exist_ok=True)
-    print(f"\n  🛰  SignalOS SaaS → http://localhost:{PORT}")
+    print(f"\n  🛰  LeadOS SaaS → http://localhost:{PORT}")
     print(f"     Авто-поиск: каждые {INTERVAL//60} мин для всех пользователей\n")
     threading.Thread(target=auto_scan_loop, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()

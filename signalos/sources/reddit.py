@@ -21,7 +21,7 @@ def _app_token(cfg):
         req = urllib.request.Request(
             "https://www.reddit.com/api/v1/access_token",
             data=b"grant_type=client_credentials",
-            headers={"Authorization": "Basic " + auth, "User-Agent": "SignalOS/0.2"})
+            headers={"Authorization": "Basic " + auth, "User-Agent": "LeadOS/0.3"})
         with urllib.request.urlopen(req, timeout=12) as r:
             d = json.loads(r.read())
         t = d.get("access_token")

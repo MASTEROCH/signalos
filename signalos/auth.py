@@ -37,8 +37,7 @@ def logout(token):
 
 
 def current_user(token):
-    uid = db.session_user(token)
-    return db.get_user(uid) if uid else None
+    return db.user_for_session(token)   # сессия+юзер одним запросом
 
 
 def _new_session(uid):
